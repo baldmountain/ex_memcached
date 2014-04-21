@@ -13,7 +13,7 @@ defmodule MemcachedE.Mixfile do
   def application do
     [
       mod: { MemcachedE, [] },
-      applications: [:xgen, :exlager]
+      applications: [:xgen, :exlager, :ranch]
     ]
   end
 
@@ -25,7 +25,8 @@ defmodule MemcachedE.Mixfile do
   defp deps do
     [
       { :xgen, github: "josevalim/xgen" },
-      { :exlager, github: "khia/exlager" }
+      { :exlager, github: "khia/exlager" },
+      { :ranch, github: "extend/ranch" }
     ]
   end
 
