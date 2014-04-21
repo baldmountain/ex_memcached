@@ -102,20 +102,26 @@ defmodule MemcachedE.Worker do
     end
   end
 
-  def handle_call({:incr, key, count}, _from, {data, current_cas}) do
+  def handle_call({:incr, key, count, intial, expiration}, _from, {data, current_cas}) do
     case Dict.get(data, key) do
       {value, timestamp, flags, exptime, _} ->
         case check_expiration(value, timestamp, exptime) do
-          nil ->
+          nil when expiration == 0xffffffff ->
             Lager.info "item expired for key #{key}"
             { :reply, :not_found, {HashDict.delete(data, key), current_cas} }
           value ->
-            value = integer_to_binary(binary_to_integer(value) + count)
+            value = value + count
             data = Dict.put(data, key, {value, :os.timestamp, flags, exptime, current_cas})
-            { :reply, value, {data, current_cas + 1} }
+            { :reply, {value, current_cas}, {data, current_cas + 1} }
+          _ ->
+            data = Dict.put(data, key, {intial, :os.timestamp, 0, expiration, current_cas})
+            { :reply, {intial, current_cas}, {data, current_cas + 1} }
         end
-      _ ->
+      nil when expiration == 0xffffffff ->
         { :reply, :not_found, {data, current_cas} }
+      _ ->
+        data = Dict.put(data, key, {intial, :os.timestamp, 0, expiration, current_cas})
+        { :reply, {intial, current_cas}, {data, current_cas + 1} }
     end
   end
 

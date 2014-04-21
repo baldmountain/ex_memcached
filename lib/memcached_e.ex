@@ -39,8 +39,8 @@ defmodule MemcachedE do
     :gen_server.call(:cache, {:delete, key})
   end
 
-  def incr key, count do
-    :gen_server.call(:cache, {:incr, key, count})
+  def incr key, count, initial, expiration  do
+    :gen_server.call(:cache, {:incr, key, count, initial, expiration})
   end
 
   def decr key, count do
