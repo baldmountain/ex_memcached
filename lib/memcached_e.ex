@@ -62,6 +62,4 @@ defmodule MemcachedE do
   def cas key, value, flags, exptime, cas do
     :gen_server.call(:cache, {:cas, key, value, flags, exptime, cas})
   end
-
-
 end

@@ -26,11 +26,15 @@ defmodule MemcachedE.Mixfile do
     [
       { :xgen, github: "josevalim/xgen" },
       { :exlager, github: "khia/exlager" },
-      { :ranch, github: "extend/ranch" }
+      { :ranch, github: "extend/ranch" },
+      {:exrm, github: "bitwalker/exrm"}
     ]
   end
 
   defp options(env) when env in [:dev, :test] do
     [exlager_level: :debug, exlager_truncation_size: 8096]
+  end
+  defp options(env) when env in [:prod] do
+    [exlager_level: :error, exlager_truncation_size: 8096]
   end
 end

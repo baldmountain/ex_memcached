@@ -3,6 +3,8 @@
 erl_crash.dump
 *.ez
 /log
+/rel
+relx
 
 .DS_Store
 .AppleDouble
