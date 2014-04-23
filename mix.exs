@@ -4,7 +4,7 @@ defmodule MemcachedE.Mixfile do
   def project do
     [ app: :memcached_e,
       version: "0.0.1",
-      elixir: "~> 0.13.0-dev",
+      elixir: "~> 0.13.0",
       deps: deps,
       elixirc_options: options(Mix.env) ]
   end

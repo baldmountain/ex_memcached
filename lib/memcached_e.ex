@@ -43,7 +43,25 @@ defmodule MemcachedE do
     :gen_server.call(:cache, {:incr, key, count, initial, expiration})
   end
 
-  def decr key, count do
-    :gen_server.call(:cache, {:decr, key, count})
+  def decr key, count, initial, expiration  do
+    :gen_server.call(:cache, {:decr, key, count, initial, expiration})
   end
+
+  def flush expiration do
+    :gen_server.call(:cache, {:flush, expiration})
+  end
+
+  def append key, value, flags, exptime do
+    :gen_server.call(:cache, {:append, key, value, flags, exptime})
+  end
+
+  def prepend key, value, flags, exptime do
+    :gen_server.call(:cache, {:prepend, key, value, flags, exptime})
+  end
+
+  def cas key, value, flags, exptime, cas do
+    :gen_server.call(:cache, {:cas, key, value, flags, exptime, cas})
+  end
+
+
 end
