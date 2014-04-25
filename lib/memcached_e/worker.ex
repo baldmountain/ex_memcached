@@ -29,15 +29,15 @@ defmodule MemcachedE.Worker do
 
   def handle_call({:set, key, value, flags, exptime}, _from, {data, current_cas}) do
     # Lager.info "set - key: #{key} len: #{size(value)}"
-    data = Dict.put(data, key, {value, :os.timestamp, flags, exptime, current_cas})
+    data = Dict.put(data, key, {value, generate_expire_time(exptime), flags, exptime, current_cas})
     { :reply, {:stored, current_cas}, {data, current_cas + 1} }
   end
 
   def handle_call({:add, key, value, flags, exptime}, _from, {data, current_cas}) do
-    Lager.info "add - key: #{key} len: #{size(value)}"
+    # Lager.info "add - key: #{key} len: #{size(value)}"
     case Dict.get(data, key) do
       nil ->
-        data = Dict.put(data, key, {value, :os.timestamp, flags, exptime, current_cas})
+        data = Dict.put(data, key, {value, generate_expire_time(exptime), flags, exptime, current_cas})
         { :reply, {:stored, current_cas}, {data, current_cas + 1} }
       {_, _, _, _, _} ->
         { :reply, :exists, {data, current_cas} }
@@ -49,7 +49,7 @@ defmodule MemcachedE.Worker do
       nil ->
         { :reply, :not_found, {data, current_cas} }
       {_, _, _, _, _} ->
-        data = Dict.put(data, key, {value, :os.timestamp, flags, exptime, current_cas})
+        data = Dict.put(data, key, {value, generate_expire_time(exptime), flags, exptime, current_cas})
         { :reply, {:stored, current_cas}, {data, current_cas + 1} }
     end
   end
@@ -77,7 +77,7 @@ defmodule MemcachedE.Worker do
   def handle_call({:cas, key, value, flags, exptime, cas}, _from, {data, current_cas}) do
     case Dict.get(data, key) do
       {_, _, _, _, ^cas} ->
-        data = Dict.put(data, key, {value, :os.timestamp, flags, exptime, cas})
+        data = Dict.put(data, key, {value, generate_expire_time(exptime), flags, exptime, cas})
         { :reply, {:stored, current_cas}, {data, current_cas} }
       {_, _, _, _, _} ->
         { :reply, :exists, {data, current_cas} }
@@ -110,18 +110,18 @@ defmodule MemcachedE.Worker do
             Lager.info "item expired for key #{key}"
             { :reply, :not_found, {HashDict.delete(data, key), current_cas} }
           nil ->
-            data = Dict.put(data, key, {integer_to_binary(intial), :os.timestamp, 0, expiration, current_cas})
+            data = Dict.put(data, key, {integer_to_binary(intial), generate_expire_time(expiration), 0, expiration, current_cas})
             { :reply, {intial, current_cas}, {data, current_cas + 1} }
           value ->
             value = binary_to_integer(value) + count
             if value > 0xffffffffffffffff, do: value = value - 0xffffffffffffffff
-            data = Dict.put(data, key, {integer_to_binary(value), :os.timestamp, flags, exptime, current_cas})
+            data = Dict.put(data, key, {integer_to_binary(value), generate_expire_time(expiration), flags, exptime, current_cas})
             { :reply, {value, current_cas}, {data, current_cas + 1} }
         end
       nil when expiration == 0xffffffff ->
         { :reply, :not_found, {data, current_cas} }
       _ ->
-        data = Dict.put(data, key, {integer_to_binary(intial), :os.timestamp, 0, expiration, current_cas})
+        data = Dict.put(data, key, {integer_to_binary(intial), generate_expire_time(expiration), 0, expiration, current_cas})
         { :reply, {intial, current_cas}, {data, current_cas + 1} }
     end
   end
@@ -134,18 +134,18 @@ defmodule MemcachedE.Worker do
             Lager.info "item expired for key #{key}"
             { :reply, :not_found, {HashDict.delete(data, key), current_cas} }
           nil ->
-            data = Dict.put(data, key, {integer_to_binary(intial), :os.timestamp, 0, expiration, current_cas})
+            data = Dict.put(data, key, {integer_to_binary(intial), generate_expire_time(expiration), 0, expiration, current_cas})
             { :reply, {intial, current_cas}, {data, current_cas + 1} }
           value ->
             value = binary_to_integer(value) - count
             if value < 0, do: value = 0
-            data = Dict.put(data, key, {integer_to_binary(value), :os.timestamp, flags, exptime, current_cas})
+            data = Dict.put(data, key, {integer_to_binary(value), generate_expire_time(expiration), flags, exptime, current_cas})
             { :reply, {value, current_cas}, {data, current_cas + 1} }
         end
       nil when expiration == 0xffffffff ->
         { :reply, :not_found, {data, current_cas} }
       _ ->
-        data = Dict.put(data, key, {integer_to_binary(intial), :os.timestamp, 0, expiration, current_cas})
+        data = Dict.put(data, key, {integer_to_binary(intial), generate_expire_time(expiration), 0, expiration, current_cas})
         { :reply, {intial, current_cas}, {data, current_cas + 1} }
     end
   end
@@ -160,15 +160,20 @@ defmodule MemcachedE.Worker do
 
   end
 
-  def check_expiration data, timestamp, exptime do
+  defp generate_expire_time(exptime) do
+    {ms,sec,_} = :os.timestamp
+    ms*1000000+sec+exptime
+  end
+
+  def check_expiration data, expire_time, exptime do
     cond do
       exptime == 0 -> data
       exptime < 31536000 ->
-        {ems,esec,_} = timestamp
         {ms,sec,_} = :os.timestamp
-        cond do
-          ems*1000000+esec+exptime < ms*1000000+sec -> data
-          true -> nil
+        now = ms*1000000+sec
+        case now < expire_time do
+          true -> data
+          false -> nil
         end
       true ->
         {ms,sec,_} = :os.timestamp

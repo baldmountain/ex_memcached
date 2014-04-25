@@ -13,7 +13,9 @@ defmodule MemcachedE.Mixfile do
   def application do
     [
       mod: { MemcachedE, [] },
-      applications: [:xgen, :exlager, :ranch]
+      applications: [:xgen, :exlager, :ranch],
+      # application configuration goes here:
+      env: [listen_port: 8080]
     ]
   end
 

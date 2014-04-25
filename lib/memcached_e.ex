@@ -1,12 +1,14 @@
 defmodule MemcachedE do
   use Application
+  require Lager
 
   # See http://elixir-lang.org/docs/stable/Application.Behaviour.html
   # for more information on OTP Applications
   def start(_type, []) do
     import Supervisor.Spec
-
-    {:ok, _} = :ranch.start_listener(:tcp_server, 1, :ranch_tcp, [{:port, 8080}], MemcachedE.Server, [])
+    port = Application.get_env(:memcached_e, :listen_port)
+    Lager.info "listening on port: #{port}"
+    {:ok, _} = :ranch.start_listener(:tcp_server, 1, :ranch_tcp, [{:port, port}], MemcachedE.Server, [])
 
     children = [
       worker(MemcachedE.Supervisor, [])

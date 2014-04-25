@@ -227,19 +227,24 @@ defmodule MemcachedE.Server do
         Lager.info "Badmatch on input command"
         << _magic, opcode, _tail::binary >> = data
         B.send_response_header(server_state, opcode, 0, 0, 0, Bd.protocol_binray_response_einval, 0, 0)
+        server_state
       :exit, value ->
         Lager.info "exit called with #{inspect value}"
+        server_state
       :throw, value ->
         Lager.info "Throw called with #{inspect value}"
+        server_state
       what, value ->
         Lager.info "Caught #{what} with #{inspect value}"
         try do
           << _magic, opcode, _keylen::[big, unsigned, integer, size(16)], _extlen, _datatype, _reserved::[big, unsigned, integer, size(16)],
             _bodylen::[big, unsigned, integer, size(32)], opaque::[big, unsigned, integer, size(32)], _tail::binary >> = data
           B.send_response_header(server_state, opcode, 0, 0, 0, Bd.protocol_binray_response_einval, 0, opaque)
+          server_state
         catch
           what, value ->
             Lager.info "Caught secondary #{what} with #{inspect value}"
+            server_state
         end
     end
     server_state
@@ -270,7 +275,7 @@ defmodule MemcachedE.Server do
           get_cmd(tail, server_state)
           loop_state = LoopState.new
         {:commands, "set"} ->
-          Lager.info "set: #{inspect parts}"
+          # Lager.info "set: #{inspect parts}"
           case parts do
             [_, k, flags, exptime, data_length] ->
               loop_state = try do
@@ -312,6 +317,52 @@ defmodule MemcachedE.Server do
               :ok
           end
         {:set, _} ->
+          Lager.info "bad data length"
+          send_error(server_state)
+          loop_state = LoopState.new
+        {:commands, "add"} ->
+          # Lager.info "set: #{inspect parts}"
+          case parts do
+            [_, k, flags, exptime, data_length] ->
+              loop_state = try do
+                LoopState[state: :add, key: k, flags: binary_to_integer(flags), exptime: binary_to_integer(exptime), data_length: binary_to_integer(data_length)]
+              catch
+                :error, :badarg ->
+                  Bd.send_data(server_state, <<"CLIENT_ERROR bad command line format\r\n">>)
+                  LoopState.new
+                what, value ->
+                  Lager.info "Caught #{inspect what} with #{inspect value}"
+                  LoopState.new
+              end
+            [_, k, flags, exptime, data_length, nr] ->
+              loop_state = try do
+                LoopState[state: :add, key: k, flags: binary_to_integer(flags), exptime: binary_to_integer(exptime), data_length: binary_to_integer(data_length), no_reply: nr]
+              catch
+                :error, :badarg ->
+                  Bd.send_data(server_state, <<"CLIENT_ERROR bad command line format\r\n">>)
+                  LoopState.new
+                what, value ->
+                  Lager.info "Caught #{inspect what} with #{inspect value}"
+                  LoopState.new
+              end
+            _ ->
+              send_error(server_state)
+              loop_state = LoopState.new
+          end
+        {:add, _} when cmd_size == data_length ->
+          add_cmd(loop_state, cmd, server_state)
+          loop_state = LoopState.new
+        {:add, _} when cmd_size < data_length ->
+          case read_remainder_ascii(cmd, data_length, server_state) do
+            {cmd, rest} ->
+              add_cmd(loop_state, cmd, server_state)
+              loop_state = LoopState.new
+              if size(rest) > 0, do: server_state = server_state.existing_data(rest)
+            _ ->
+              loop_state = LoopState.new
+              :ok
+          end
+        {:add, _} ->
           Lager.info "bad data length"
           send_error(server_state)
           loop_state = LoopState.new
@@ -388,7 +439,7 @@ defmodule MemcachedE.Server do
           send_error(server_state)
           loop_state = LoopState.new
       end
-      Lager.info ">>> loop_state: #{inspect loop_state}"
+      # Lager.info ">>> loop_state: #{inspect loop_state}"
       loop_state
     end
     # Lager.info ">>> server_state: #{inspect server_state}"
@@ -433,6 +484,14 @@ defmodule MemcachedE.Server do
 
   defp set_cmd(loop_state, value, _server_state) do
     MemcachedE.set(loop_state.key, value, loop_state.flags, loop_state.exptime)
+  end
+
+  defp add_cmd(loop_state = LoopState[no_reply: nil], value, server_state) do
+    send_ascii_reply(MemcachedE.set(loop_state.key, value, loop_state.flags, loop_state.exptime), server_state)
+  end
+
+  defp add_cmd(loop_state, value, _server_state) do
+    MemcachedE.add(loop_state.key, value, loop_state.flags, loop_state.exptime)
   end
 
   defp cas_cmd(loop_state = LoopState[no_reply: nil], value, server_state) do
@@ -504,6 +563,11 @@ defmodule MemcachedE.Server do
 
   defp stats_cmd(["stats", value], server_state) do
     Lager.info "stats for #{value}"
+    Bd.send_data(server_state, <<"END\r\n">>)
+  end
+
+  defp stats_cmd(["stats", value, parameter], server_state) do
+    Lager.info "stats for #{value} #{parameter}"
     Bd.send_data(server_state, <<"END\r\n">>)
   end
 
