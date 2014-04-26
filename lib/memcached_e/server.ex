@@ -48,10 +48,10 @@ defmodule MemcachedE.Server do
     server_state = try do
       << magic, opcode, keylen::[big, unsigned, integer, size(16)], extlen, datatype, reserved::[big, unsigned, integer, size(16)],
         bodylen::[big, unsigned, integer, size(32)], opaque::[big, unsigned, integer, size(32)], cas::[big, unsigned, integer, size(64)], tail::binary >> = data
-        Lager.info "magic #{magic} opcode #{opcode} keylen #{keylen} extlen #{extlen} datatype #{datatype} reserved #{reserved} bodylen #{bodylen} opaque #{opaque} cas #{cas}"
+        # Lager.info "magic #{magic} opcode #{opcode} keylen #{keylen} extlen #{extlen} datatype #{datatype} reserved #{reserved} bodylen #{bodylen} opaque #{opaque} cas #{cas}"
 
       if keylen > 250 do
-        B.send_response_header(server_state, opcode, 0, 0, 0, Bd.protocol_binray_response_e2big, 0, opaque)
+        B.send_too_big_response(server_state, opcode, opaque)
       else
         case opcode do
           Bd.protocol_binray_cmd_noop -> B.send_response_header(server_state, opcode, 0, 0, 0, Bd.protocol_binray_response_success, 0, opaque)
@@ -61,52 +61,130 @@ defmodule MemcachedE.Server do
           Bd.protocol_binray_cmd_quitq ->
             close_transport(server_state)
           Bd.protocol_binray_cmd_set when extlen == 8 ->
+            data_len = bodylen - extlen - keylen
             << flags::size(32), exptime::size(32), key::[binary, size(keylen)], data::binary >> = tail
-            case read_remainder(data, bodylen - extlen - keylen, server_state) do
-              {data, rest} ->
-                server_state = B.binary_set_cmd(key, data, flags, exptime, opcode, opaque, server_state)
-                server_state = handle_binary_protocol(rest, server_state)
-              data -> server_state = B.binary_set_cmd(key, data, flags, exptime, opcode, opaque, server_state)
+            cond do
+              data_len > Application.get_env(:memcached_e, :max_data_size) ->
+                # delete if the key exists
+                MemcachedE.delete key
+                case read_remainder(data, bodylen - extlen - keylen, server_state) do
+                  {data, rest} ->
+                    B.send_too_big_response(server_state, opcode, opaque)
+                    server_state = handle_binary_protocol(rest, server_state)
+                  data -> B.send_too_big_response(server_state, opcode, opaque)
+                end
+              true ->
+                case read_remainder(data, bodylen - extlen - keylen, server_state) do
+                  {data, rest} ->
+                    server_state = B.binary_set_cmd(key, data, flags, exptime, opcode, opaque, server_state)
+                    server_state = handle_binary_protocol(rest, server_state)
+                  data -> server_state = B.binary_set_cmd(key, data, flags, exptime, opcode, opaque, server_state)
+                end
             end
           Bd.protocol_binray_cmd_setq when extlen == 8 ->
+            data_len = bodylen - extlen - keylen
             << flags::size(32), exptime::size(32), key::[binary, size(keylen)], data::binary >> = tail
-            case read_remainder(data, bodylen - extlen - keylen, server_state) do
-              {data, rest} ->
-                MemcachedE.set(key, data, flags, exptime)
-                server_state = handle_binary_protocol(rest, server_state)
-              data -> MemcachedE.set(key, data, flags, exptime)
+            cond do
+              data_len > Application.get_env(:memcached_e, :max_data_size) ->
+                # delete if the key exists
+                MemcachedE.delete key
+                case read_remainder(data, bodylen - extlen - keylen, server_state) do
+                  {data, rest} ->
+                    B.send_too_big_response(server_state, opcode, opaque)
+                    server_state = handle_binary_protocol(rest, server_state)
+                  data -> B.send_too_big_response(server_state, opcode, opaque)
+                end
+              true ->
+                case read_remainder(data, bodylen - extlen - keylen, server_state) do
+                  {data, rest} ->
+                    MemcachedE.set(key, data, flags, exptime)
+                    server_state = handle_binary_protocol(rest, server_state)
+                  data -> MemcachedE.set(key, data, flags, exptime)
+                end
             end
           Bd.protocol_binray_cmd_add ->
-            {key, data} = key_data(extlen, keylen, tail)
-            case read_remainder(data, bodylen - extlen - keylen, server_state) do
-              {data, rest} ->
-                server_state = B.binary_add_cmd(key, data, opcode, opaque, server_state)
-                server_state = handle_binary_protocol(rest, server_state)
-              data -> B.binary_add_cmd(key, data, opcode, opaque, server_state)
+            data_len = bodylen - extlen - keylen
+            << flags::size(32), exptime::size(32), key::[binary, size(keylen)], data::binary >> = tail
+            cond do
+              data_len > Application.get_env(:memcached_e, :max_data_size) ->
+                # delete if the key exists
+                MemcachedE.delete key
+                case read_remainder(data, bodylen - extlen - keylen, server_state) do
+                  {data, rest} ->
+                    B.send_too_big_response(server_state, opcode, opaque)
+                    server_state = handle_binary_protocol(rest, server_state)
+                  data -> B.send_too_big_response(server_state, opcode, opaque)
+                end
+              true ->
+                case read_remainder(data, bodylen - extlen - keylen, server_state) do
+                  {data, rest} ->
+                    server_state = B.binary_add_cmd(key, data, flags, exptime, opcode, opaque, server_state)
+                    server_state = handle_binary_protocol(rest, server_state)
+                  data -> B.binary_add_cmd(key, data, flags, exptime, opcode, opaque, server_state)
+                end
             end
           Bd.protocol_binray_cmd_addq ->
-            {key, data} = key_data(extlen, keylen, tail)
-            case read_remainder(data, bodylen - extlen - keylen, server_state) do
-              {data, rest} ->
-                server_state = B.binary_addq_cmd(key, data, opcode, opaque, server_state)
-                server_state = handle_binary_protocol(rest, server_state)
-              data -> server_state = B.binary_addq_cmd(key, data, opcode, opaque, server_state)
+            data_len = bodylen - extlen - keylen
+            << flags::size(32), exptime::size(32), key::[binary, size(keylen)], data::binary >> = tail
+            cond do
+              data_len > Application.get_env(:memcached_e, :max_data_size) ->
+                # delete if the key exists
+                MemcachedE.delete key
+                case read_remainder(data, bodylen - extlen - keylen, server_state) do
+                  {data, rest} ->
+                    B.send_too_big_response(server_state, opcode, opaque)
+                    server_state = handle_binary_protocol(rest, server_state)
+                  data -> B.send_too_big_response(server_state, opcode, opaque)
+                end
+              true ->
+                case read_remainder(data, bodylen - extlen - keylen, server_state) do
+                  {data, rest} ->
+                    server_state = B.binary_addq_cmd(key, data, flags, exptime, opcode, opaque, server_state)
+                    server_state = handle_binary_protocol(rest, server_state)
+                  data -> server_state = B.binary_addq_cmd(key, data, flags, exptime, opcode, opaque, server_state)
+                end
             end
           Bd.protocol_binray_cmd_replace ->
-            {key, data} = key_data(extlen, keylen, tail)
-            case read_remainder(data, bodylen - extlen - keylen, server_state) do
-              {data, rest} ->
-                server_state = B.binary_replace_cmd(key, data, opcode, opaque, server_state)
-                server_state = handle_binary_protocol(rest, server_state)
-              data -> server_state = B.binary_replace_cmd(key, data, opcode, opaque, server_state)
+            data_len = bodylen - extlen - keylen
+            << flags::size(32), exptime::size(32), key::[binary, size(keylen)], data::binary >> = tail
+            cond do
+              data_len > Application.get_env(:memcached_e, :max_data_size) ->
+                # delete if the key exists
+                MemcachedE.delete key
+                case read_remainder(data, bodylen - extlen - keylen, server_state) do
+                  {data, rest} ->
+                    B.send_too_big_response(server_state, opcode, opaque)
+                    server_state = handle_binary_protocol(rest, server_state)
+                  data -> B.send_too_big_response(server_state, opcode, opaque)
+                end
+              true ->
+                case read_remainder(data, bodylen - extlen - keylen, server_state) do
+                  {data, rest} ->
+                    server_state = B.binary_replace_cmd(key, data, flags, exptime, opcode, opaque, server_state)
+                    server_state = handle_binary_protocol(rest, server_state)
+                  data -> server_state = B.binary_replace_cmd(key, data, flags, exptime, opcode, opaque, server_state)
+                end
             end
           Bd.protocol_binray_cmd_replaceq ->
-            {key, data} = key_data(extlen, keylen, tail)
-            case read_remainder(data, bodylen - extlen - keylen, server_state) do
-              {data, rest} ->
-                server_state = B.binary_replaceq_cmd(key, data, opcode, opaque, server_state)
-                server_state = handle_binary_protocol(rest, server_state)
-              data -> server_state = B.binary_replaceq_cmd(key, data, opcode, opaque, server_state)
+            data_len = bodylen - extlen - keylen
+            << flags::size(32), exptime::size(32), key::[binary, size(keylen)], data::binary >> = tail
+            cond do
+              data_len > Application.get_env(:memcached_e, :max_data_size) ->
+                # delete if the key exists
+                MemcachedE.delete key
+                case read_remainder(data, bodylen - extlen - keylen, server_state) do
+                  {data, rest} ->
+                    B.send_too_big_response(server_state, opcode, opaque)
+                    server_state = handle_binary_protocol(rest, server_state)
+                  data -> B.send_too_big_response(server_state, opcode, opaque)
+                end
+              true ->
+                case read_remainder(data, bodylen - extlen - keylen, server_state) do
+                  {data, rest} ->
+                    server_state = B.binary_replaceq_cmd(key, data, flags, exptime, opcode, opaque, server_state)
+                    server_state = handle_binary_protocol(rest, server_state)
+                  data -> server_state = B.binary_replaceq_cmd(key, data, flags, exptime, opcode, opaque, server_state)
+                end
             end
           Bd.protocol_binray_cmd_delete ->
             {key, data} = key_data(extlen, keylen, tail)
@@ -234,18 +312,18 @@ defmodule MemcachedE.Server do
       :throw, value ->
         Lager.info "Throw called with #{inspect value}"
         server_state
-      what, value ->
-        Lager.info "Caught #{what} with #{inspect value}"
-        try do
-          << _magic, opcode, _keylen::[big, unsigned, integer, size(16)], _extlen, _datatype, _reserved::[big, unsigned, integer, size(16)],
-            _bodylen::[big, unsigned, integer, size(32)], opaque::[big, unsigned, integer, size(32)], _tail::binary >> = data
-          B.send_response_header(server_state, opcode, 0, 0, 0, Bd.protocol_binray_response_einval, 0, opaque)
-          server_state
-        catch
-          what, value ->
-            Lager.info "Caught secondary #{what} with #{inspect value}"
-            server_state
-        end
+      # what, value ->
+      #   Lager.info "Caught #{what} with #{inspect value}"
+      #   try do
+      #     << _magic, opcode, _keylen::[big, unsigned, integer, size(16)], _extlen, _datatype, _reserved::[big, unsigned, integer, size(16)],
+      #       _bodylen::[big, unsigned, integer, size(32)], opaque::[big, unsigned, integer, size(32)], _tail::binary >> = data
+      #     B.send_response_header(server_state, opcode, 0, 0, 0, Bd.protocol_binray_response_einval, 0, opaque)
+      #     server_state
+      #   catch
+      #     what, value ->
+      #       Lager.info "Caught secondary #{what} with #{inspect value}"
+      #       server_state
+      #   end
     end
     server_state
   end
@@ -321,7 +399,7 @@ defmodule MemcachedE.Server do
           send_error(server_state)
           loop_state = LoopState.new
         {:commands, "add"} ->
-          # Lager.info "set: #{inspect parts}"
+          Lager.info "add: #{inspect parts}"
           case parts do
             [_, k, flags, exptime, data_length] ->
               loop_state = try do
@@ -363,6 +441,144 @@ defmodule MemcachedE.Server do
               :ok
           end
         {:add, _} ->
+          Lager.info "bad data length"
+          send_error(server_state)
+          loop_state = LoopState.new
+        {:commands, "replace"} ->
+          Lager.info "replace: #{inspect parts}"
+          case parts do
+            [_, k, flags, exptime, data_length] ->
+              loop_state = try do
+                LoopState[state: :replace, key: k, flags: binary_to_integer(flags), exptime: binary_to_integer(exptime), data_length: binary_to_integer(data_length)]
+              catch
+                :error, :badarg ->
+                  Bd.send_data(server_state, <<"CLIENT_ERROR bad command line format\r\n">>)
+                  LoopState.new
+                what, value ->
+                  Lager.info "Caught #{inspect what} with #{inspect value}"
+                  LoopState.new
+              end
+            [_, k, flags, exptime, data_length, nr] ->
+              loop_state = try do
+                LoopState[state: :replace, key: k, flags: binary_to_integer(flags), exptime: binary_to_integer(exptime), data_length: binary_to_integer(data_length), no_reply: nr]
+              catch
+                :error, :badarg ->
+                  Bd.send_data(server_state, <<"CLIENT_ERROR bad command line format\r\n">>)
+                  LoopState.new
+                what, value ->
+                  Lager.info "Caught #{inspect what} with #{inspect value}"
+                  LoopState.new
+              end
+            _ ->
+              send_error(server_state)
+              loop_state = LoopState.new
+          end
+        {:replace, _} when cmd_size == data_length ->
+          replace_cmd(loop_state, cmd, server_state)
+          loop_state = LoopState.new
+        {:replace, _} when cmd_size < data_length ->
+          case read_remainder_ascii(cmd, data_length, server_state) do
+            {cmd, rest} ->
+              replace_cmd(loop_state, cmd, server_state)
+              loop_state = LoopState.new
+              if size(rest) > 0, do: server_state = server_state.existing_data(rest)
+            _ ->
+              loop_state = LoopState.new
+              :ok
+          end
+        {:replace, _} ->
+          Lager.info "bad data length"
+          send_error(server_state)
+          loop_state = LoopState.new
+        {:commands, "append"} ->
+          Lager.info "append: #{inspect parts}"
+          case parts do
+            [_, k, flags, exptime, data_length] ->
+              loop_state = try do
+                LoopState[state: :append, key: k, flags: binary_to_integer(flags), exptime: binary_to_integer(exptime), data_length: binary_to_integer(data_length)]
+              catch
+                :error, :badarg ->
+                  Bd.send_data(server_state, <<"CLIENT_ERROR bad command line format\r\n">>)
+                  LoopState.new
+                what, value ->
+                  Lager.info "Caught #{inspect what} with #{inspect value}"
+                  LoopState.new
+              end
+            [_, k, flags, exptime, data_length, nr] ->
+              loop_state = try do
+                LoopState[state: :append, key: k, flags: binary_to_integer(flags), exptime: binary_to_integer(exptime), data_length: binary_to_integer(data_length), no_reply: nr]
+              catch
+                :error, :badarg ->
+                  Bd.send_data(server_state, <<"CLIENT_ERROR bad command line format\r\n">>)
+                  LoopState.new
+                what, value ->
+                  Lager.info "Caught #{inspect what} with #{inspect value}"
+                  LoopState.new
+              end
+            _ ->
+              send_error(server_state)
+              loop_state = LoopState.new
+          end
+        {:append, _} when cmd_size == data_length ->
+          append_cmd(loop_state, cmd, server_state)
+          loop_state = LoopState.new
+        {:append, _} when cmd_size < data_length ->
+          case read_remainder_ascii(cmd, data_length, server_state) do
+            {cmd, rest} ->
+              append_cmd(loop_state, cmd, server_state)
+              loop_state = LoopState.new
+              if size(rest) > 0, do: server_state = server_state.existing_data(rest)
+            _ ->
+              loop_state = LoopState.new
+              :ok
+          end
+        {:append, _} ->
+          Lager.info "bad data length"
+          send_error(server_state)
+          loop_state = LoopState.new
+        {:commands, "prepend"} ->
+          Lager.info "prepend: #{inspect parts}"
+          case parts do
+            [_, k, flags, exptime, data_length] ->
+              loop_state = try do
+                LoopState[state: :prepend, key: k, flags: binary_to_integer(flags), exptime: binary_to_integer(exptime), data_length: binary_to_integer(data_length)]
+              catch
+                :error, :badarg ->
+                  Bd.send_data(server_state, <<"CLIENT_ERROR bad command line format\r\n">>)
+                  LoopState.new
+                what, value ->
+                  Lager.info "Caught #{inspect what} with #{inspect value}"
+                  LoopState.new
+              end
+            [_, k, flags, exptime, data_length, nr] ->
+              loop_state = try do
+                LoopState[state: :prepend, key: k, flags: binary_to_integer(flags), exptime: binary_to_integer(exptime), data_length: binary_to_integer(data_length), no_reply: nr]
+              catch
+                :error, :badarg ->
+                  Bd.send_data(server_state, <<"CLIENT_ERROR bad command line format\r\n">>)
+                  LoopState.new
+                what, value ->
+                  Lager.info "Caught #{inspect what} with #{inspect value}"
+                  LoopState.new
+              end
+            _ ->
+              send_error(server_state)
+              loop_state = LoopState.new
+          end
+        {:prepend, _} when cmd_size == data_length ->
+          prepend_cmd(loop_state, cmd, server_state)
+          loop_state = LoopState.new
+        {:prepend, _} when cmd_size < data_length ->
+          case read_remainder_ascii(cmd, data_length, server_state) do
+            {cmd, rest} ->
+              prepend_cmd(loop_state, cmd, server_state)
+              loop_state = LoopState.new
+              if size(rest) > 0, do: server_state = server_state.existing_data(rest)
+            _ ->
+              loop_state = LoopState.new
+              :ok
+          end
+        {:prepend, _} ->
           Lager.info "bad data length"
           send_error(server_state)
           loop_state = LoopState.new
@@ -423,6 +639,10 @@ defmodule MemcachedE.Server do
           [_|tail] = parts
           decr_cmd(tail, server_state)
           loop_state = LoopState.new
+        {:commands, "touch"} ->
+          [_|tail] = parts
+          touch_cmd(tail, server_state)
+          loop_state = LoopState.new
         {:commands, "stats"} ->
           stats_cmd(parts, server_state)
           loop_state = LoopState.new
@@ -470,6 +690,10 @@ defmodule MemcachedE.Server do
     Bd.send_data(server_state, <<"DELETED\r\n">>)
   end
 
+  defp send_ascii_reply :touched, server_state do
+    Bd.send_data(server_state, <<"TOUCHED\r\n">>)
+  end
+
   defp send_ascii_reply {value, _cas}, server_state do
     Bd.send_data(server_state, <<"#{value}\r\n">>)
   end
@@ -492,6 +716,30 @@ defmodule MemcachedE.Server do
 
   defp add_cmd(loop_state, value, _server_state) do
     MemcachedE.add(loop_state.key, value, loop_state.flags, loop_state.exptime)
+  end
+
+  defp replace_cmd(loop_state = LoopState[no_reply: nil], value, server_state) do
+    send_ascii_reply(MemcachedE.replace(loop_state.key, value, loop_state.flags, loop_state.exptime), server_state)
+  end
+
+  defp replace_cmd(loop_state, value, _server_state) do
+    MemcachedE.replace(loop_state.key, value, loop_state.flags, loop_state.exptime)
+  end
+
+  defp append_cmd(loop_state = LoopState[no_reply: nil], value, server_state) do
+    send_ascii_reply(MemcachedE.append(loop_state.key, value, loop_state.flags, loop_state.exptime), server_state)
+  end
+
+  defp append_cmd(loop_state, value, _server_state) do
+    MemcachedE.append(loop_state.key, value, loop_state.flags, loop_state.exptime)
+  end
+
+  defp prepend_cmd(loop_state = LoopState[no_reply: nil], value, server_state) do
+    send_ascii_reply(MemcachedE.prepend(loop_state.key, value, loop_state.flags, loop_state.exptime), server_state)
+  end
+
+  defp prepend_cmd(loop_state, value, _server_state) do
+    MemcachedE.prepend(loop_state.key, value, loop_state.flags, loop_state.exptime)
   end
 
   defp cas_cmd(loop_state = LoopState[no_reply: nil], value, server_state) do
@@ -521,6 +769,14 @@ defmodule MemcachedE.Server do
 
   defp delete_cmd([key, _], _server_state) do
     MemcachedE.delete(key)
+  end
+
+  defp touch_cmd([key, exiration], server_state) do
+    send_ascii_reply(MemcachedE.touch(key, exiration), server_state)
+  end
+
+  defp touch_cmd([key, exiration, _], server_state) do
+    MemcachedE.touch(key, exiration)
   end
 
   defp incr_cmd([key], server_state) do

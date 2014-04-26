@@ -14,6 +14,11 @@ defmodule MemcachedE.BinaryCommands do
     Bd.send_data(server_state, data)
   end
 
+  def send_too_big_response(server_state, opcode, opaque) do
+    Lager.info "data item too big for opcode: #{opcode}"
+    send_response_header(server_state, opcode, 0, 0, 0, Bd.protocol_binray_response_e2big, 0, opaque)
+  end
+
   def binary_set_cmd(key, value, flags, exptime, opcode, opaque, server_state) do
     # Lager.info "binary_set_cmd: #{key} #{inspect value} #{inspect flags} #{inspect exptime} 0x#{integer_to_binary(opaque, 16)}"
     case MemcachedE.set(key, value, flags, exptime) do
@@ -23,36 +28,36 @@ defmodule MemcachedE.BinaryCommands do
     server_state
   end
 
-  def binary_add_cmd(key, value, opcode, opaque, server_state) do
+  def binary_add_cmd(key, value, flags, exptime, opcode, opaque, server_state) do
     # Lager.info "binary_add_cmd: #{key} #{inspect value} 0x#{integer_to_binary(opaque, 16)}"
-    case MemcachedE.add(key, value, 0, 0) do
+    case MemcachedE.add(key, value, flags, exptime) do
       {:stored, current_cas} -> send_response_header(server_state, opcode, 0, 0, 0, Bd.protocol_binray_response_success, 0, opaque, current_cas)
       :exists -> send_response_header(server_state, opcode, 0, 0, 0, Bd.protocol_binray_response_key_eexists, 0, opaque)
     end
     server_state
   end
 
-  def binary_addq_cmd(key, value, opcode, opaque, server_state) do
+  def binary_addq_cmd(key, value, flags, exptime, opcode, opaque, server_state) do
     # Lager.info "binary_addq_cmd: #{key} #{inspect value} 0x#{integer_to_binary(opaque, 16)}"
-    case MemcachedE.add(key, value, 0, 0) do
+    case MemcachedE.add(key, value, flags, exptime) do
       :exists -> send_response_header(server_state, opcode, 0, 0, 0, Bd.protocol_binray_response_key_eexists, 0, opaque)
       _ -> :ok
     end
     server_state
   end
 
-  def binary_replace_cmd(key, value, opcode, opaque, server_state) do
+  def binary_replace_cmd(key, value, flags, exptime, opcode, opaque, server_state) do
     # Lager.info "binary_replace_cmd: #{key} #{inspect value} 0x#{integer_to_binary(opaque, 16)}"
-    case MemcachedE.replace(key, value, 0, 0) do
+    case MemcachedE.replace(key, value, flags, exptime) do
       {:stored, current_cas} -> send_response_header(server_state, opcode, 0, 0, 0, Bd.protocol_binray_response_success, 0, opaque, current_cas)
       :not_found -> send_response_header(server_state, opcode, 0, 0, 0, Bd.protocol_binray_response_key_enoent, 0, opaque)
     end
     server_state
   end
 
-  def binary_replaceq_cmd(key, value, opcode, opaque, server_state) do
+  def binary_replaceq_cmd(key, value, flags, exptime, opcode, opaque, server_state) do
     # Lager.info "binary_replaceq_cmd: #{key} #{inspect value} 0x#{integer_to_binary(opaque, 16)}"
-    case MemcachedE.replace(key, value, 0, 0) do
+    case MemcachedE.replace(key, value, flags, exptime) do
       :not_found -> send_response_header(server_state, opcode, 0, 0, 0, Bd.protocol_binray_response_key_enoent, 0, opaque)
       _ -> :ok
     end

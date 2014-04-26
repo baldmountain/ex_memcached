@@ -102,6 +102,22 @@ defmodule MemcachedE.Worker do
     end
   end
 
+  def handle_call({:touch, key, expiration}, _from, {data, current_cas}) do
+    case Dict.get(data, key) do
+      {value, timestamp, flags, exptime, _} ->
+        case check_expiration(value, timestamp, exptime) do
+          nil ->
+            Lager.info "item expired for key #{key}"
+            { :reply, :not_found, {HashDict.delete(data, key), current_cas} }
+          _value ->
+            data = Dict.put(data, {value, key, generate_expire_time(expiration), flags, exptime, current_cas})
+            { :reply, :deleted, {data, current_cas + 1} }
+        end
+      _ ->
+        { :reply, :not_found, {data, current_cas} }
+    end
+  end
+
   def handle_call({:incr, key, count, intial, expiration}, _from, {data, current_cas}) do
     case Dict.get(data, key) do
       {value, timestamp, flags, exptime, _} ->
@@ -161,25 +177,23 @@ defmodule MemcachedE.Worker do
   end
 
   defp generate_expire_time(exptime) do
-    {ms,sec,_} = :os.timestamp
-    ms*1000000+sec+exptime
+    cond do
+      exptime < 31536000 ->
+        {ms,sec,_} = :os.timestamp
+        ms*1000000+sec+exptime
+      true -> exptime
+    end
   end
 
   def check_expiration data, expire_time, exptime do
     cond do
       exptime == 0 -> data
-      exptime < 31536000 ->
+      true ->
         {ms,sec,_} = :os.timestamp
         now = ms*1000000+sec
         case now < expire_time do
           true -> data
           false -> nil
-        end
-      true ->
-        {ms,sec,_} = :os.timestamp
-        cond do
-          exptime < ms*1000000+sec -> data
-          true -> nil
         end
     end
   end
