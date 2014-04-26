@@ -104,6 +104,26 @@ defmodule MemcachedETest do
     << Bd.protocol_binary_res, Bd.protocol_binray_cmd_noop, 0::size(16), 0, 0, Bd.protocol_binray_response_success::size(16), _body_len::size(32), 0::size(32), _cas::size(64) >> = String.slice(response, 0..23)
   end
 
+  def b_get_multi keys, socket do
+    Enum.with_index keys, fn({key, index}) ->
+      body_len = size(key)
+      :ok = :gen_tcp.send(socket, <<Bd.protocol_binary_req, Bd.protocol_binray_cmd_getq, body_len::size(16), 0, 0, 0::size(16), body_len::size(32),
+        index::size(32), 0::size(64) >> <> key)
+    end
+    Enum.reduce keys, [] fn(key, result) ->
+      case :gen_tcp.recv(socket, 0, 500) do
+        {:ok, response} ->
+          case String.slice(response, 0..27) do
+            << Bd.protocol_binary_res, Bd.protocol_binray_cmd_get, 0::size(16), 4, 0, Bd.protocol_binray_response_success::size(16), _body_len::size(32), index::size(32), _cas::size(64), flags::size(32) >> ->
+              result ++ {keys[index], String.slice(response, 28..-1), flags}
+            _ -> result
+          end
+        _ ->
+          result
+      end
+    end
+  end
+
   def stats socket do
     :ok = :gen_tcp.send(socket, 'stats\r\n')
     Th.receive_stats(socket, HashDict.new)
@@ -197,6 +217,13 @@ defmodule MemcachedETest do
     {"ex2", 14} = b_get "j", meta[:socket]
     assert Bd.protocol_binray_response_success == b_replace "j", "ex3", 24, 5, meta[:socket]
     {"ex3", 24} = b_get "j", meta[:socket]
+
+    # Multiget
+    my $rv = $mc->get_multi(qw(xx wye zed));
+
+    assert Bd.protocol_binray_response_success == b_add "xx", "ex", 1, 5, meta[:socket]
+    assert Bd.protocol_binray_response_success == b_add "wye", "why", 2, 5, meta[:socket]
+    response = b_get_multi(["xx", "wye"])
 
   end
 
