@@ -36,7 +36,7 @@ defmodule Th do
             case acc do
               {false, values} ->
                 case String.split(item, " ") do
-                  ["VALUE", ^key, flags, bytes] ->
+                  ["VALUE", ^key, _flags, _bytes] ->
                     {false, values}
                   ["END"] ->
                     {true, values}

@@ -76,4 +76,42 @@ defmodule MemcachedE.BaseDefinitions do
 
   def send_data(server_state, data), do: server_state.transport.send(server_state.socket, data)
 
+  def opcode_description opcode do
+    case opcode do
+      0 -> "get"
+      1 -> "set"
+      2 -> "add"
+      3 -> "replace"
+      4 -> "delete"
+      5 -> "increment"
+      6 -> "decrement"
+      7 -> "quit"
+      8 -> "flush"
+      9 -> "getq"
+      10 -> "noop"
+      11 -> "version"
+      12 -> "getk"
+      13 -> "getkq"
+      14 -> "append"
+      15 -> "prepend"
+      16 -> "stat"
+      17 -> "setq"
+      18 -> "addq"
+      19 -> "replaceq"
+      20 -> "deleteq"
+      21 -> "incrementq"
+      22 -> "decrementq"
+      23 -> "quitq"
+      24 -> "flush"
+      25 -> "appendq"
+      26 -> "prependq"
+      0x1c -> "touch"
+      0x1d -> "gat"
+      0x1e -> "gatq"
+      0x23 -> "gatk"
+      0x24 -> "gatkq"
+      _ -> "unknown"
+    end
+  end
+
 end

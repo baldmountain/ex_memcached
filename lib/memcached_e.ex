@@ -21,8 +21,8 @@ defmodule MemcachedE do
   def stop do
   end
 
-  def set key, value, flags, exptime do
-    :gen_server.call(:cache, {:set, key, value, flags, exptime})
+  def set key, value, flags, exptime, cas do
+    :gen_server.call(:cache, {:set, key, value, flags, exptime, cas})
   end
 
   def add key, value, flags, exptime do
