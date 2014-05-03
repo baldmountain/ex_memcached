@@ -37,6 +37,10 @@ defmodule MemcachedE do
     :gen_server.call(:cache, {:get, key})
   end
 
+  def gat key, exptime do
+    :gen_server.call(:cache, {:gat, key, exptime})
+  end
+
   def delete key do
     :gen_server.call(:cache, {:delete, key})
   end

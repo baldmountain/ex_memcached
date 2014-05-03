@@ -19,7 +19,7 @@ defmodule MemcachedE.Worker do
       {value, timestamp, flags, exptime, cas} ->
         case check_expiration(value, timestamp, exptime) do
           nil ->
-            Lager.info "item expired for key #{key}"
+            # Lager.info "item expired for key #{key}"
             { :reply, :not_found, {HashDict.delete(data, key), current_cas} }
           value ->
             { :reply, {value, flags, cas}, {data, current_cas} }
@@ -28,7 +28,7 @@ defmodule MemcachedE.Worker do
   end
 
   def handle_call({:set, key, value, flags, exptime, cas}, _from, {data, current_cas}) do
-    # Lager.info "set - key: #{key} len: #{size(value)} #{case}"
+    # Lager.info "set - key: #{key} len: #{size(value)} #{cas}"
     case cas do
       0 ->
         data = Dict.put(data, key, {value, generate_expire_time(exptime), flags, exptime, current_cas})
@@ -46,24 +46,35 @@ defmodule MemcachedE.Worker do
     end
   end
 
-  def handle_call({:add, key, value, flags, exptime}, _from, {data, current_cas}) do
+  def handle_call({:add, key, value, flags, expirary}, _from, {data, current_cas}) do
     # Lager.info "add - key: #{key} len: #{size(value)}"
     case Dict.get(data, key) do
       nil ->
-        data = Dict.put(data, key, {value, generate_expire_time(exptime), flags, exptime, current_cas})
+        data = Dict.put(data, key, {value, generate_expire_time(expirary), flags, expirary, current_cas})
         { :reply, {:stored, current_cas}, {data, current_cas + 1} }
-      {_, _, _, _, _} ->
-        { :reply, :exists, {data, current_cas} }
+      {old_value, timestamp, _, exptime, _} ->
+        case check_expiration(old_value, timestamp, exptime) do
+          nil ->
+            data = Dict.put(data, key, {value, generate_expire_time(expirary), flags, expirary, current_cas})
+            { :reply, {:stored, current_cas}, {data, current_cas + 1} }
+          _ ->
+            { :reply, :not_stored, {data, current_cas} }
+        end
     end
   end
 
-  def handle_call({:replace, key, value, flags, exptime}, _from, {data, current_cas}) do
+  def handle_call({:replace, key, value, flags, expirary}, _from, {data, current_cas}) do
     case Dict.get(data, key) do
       nil ->
         { :reply, :not_found, {data, current_cas} }
-      {_, _, _, _, _} ->
-        data = Dict.put(data, key, {value, generate_expire_time(exptime), flags, exptime, current_cas})
-        { :reply, {:stored, current_cas}, {data, current_cas + 1} }
+      {old_value, timestamp, _, exptime, _} ->
+        case check_expiration(old_value, timestamp, exptime) do
+          nil ->
+            { :reply, :not_found, {data, current_cas} }
+          _ ->
+            data = Dict.put(data, key, {value, generate_expire_time(expirary), flags, expirary, current_cas})
+            { :reply, {:stored, current_cas}, {data, current_cas + 1} }
+        end
     end
   end
 
@@ -104,7 +115,7 @@ defmodule MemcachedE.Worker do
       {value, timestamp, _, exptime, _} ->
         case check_expiration(value, timestamp, exptime) do
           nil ->
-            Lager.info "item expired for key #{key}"
+            # Lager.info "item expired for key #{key}"
             { :reply, :not_found, {HashDict.delete(data, key), current_cas} }
           _value ->
             data = Dict.delete(data, key)
@@ -120,14 +131,31 @@ defmodule MemcachedE.Worker do
       {value, timestamp, flags, exptime, _} ->
         case check_expiration(value, timestamp, exptime) do
           nil ->
-            Lager.info "item expired for key #{key}"
+            # Lager.info "item expired for key #{key}"
             { :reply, :not_found, {HashDict.delete(data, key), current_cas} }
           _value ->
-            data = Dict.put(data, {value, key, generate_expire_time(expiration), flags, exptime, current_cas})
-            { :reply, :deleted, {data, current_cas + 1} }
+            data = Dict.put(data, key, {value, generate_expire_time(expiration), flags, expiration, current_cas})
+            { :reply, :touched, {data, current_cas + 1} }
         end
       _ ->
         { :reply, :not_found, {data, current_cas} }
+    end
+  end
+
+  def handle_call({:gat, key, expiration} , _from, {data, current_cas}) do
+    case Dict.get(data, key) do
+      nil ->
+        # Lager.info "item not found for key #{key}"
+        { :reply, :not_found, {data, current_cas} }
+      {value, timestamp, flags, exptime, cas} ->
+        case check_expiration(value, timestamp, exptime) do
+          nil ->
+            # Lager.info "item expired for key #{key}"
+            { :reply, :not_found, {HashDict.delete(data, key), current_cas} }
+          value ->
+            data = Dict.put(data, key, {value, generate_expire_time(expiration), flags, expiration, current_cas})
+            { :reply, {value, flags, cas}, {data, current_cas + 1} }
+        end
     end
   end
 
@@ -136,28 +164,28 @@ defmodule MemcachedE.Worker do
       {value, timestamp, flags, exptime, _} ->
         case check_expiration(value, timestamp, exptime) do
           nil when expiration == 0xffffffff ->
-            Lager.info "item expired for key #{key}"
+            # Lager.info "item expired for key #{key}"
             { :reply, :not_found, {HashDict.delete(data, key), current_cas} }
           nil ->
             data = Dict.put(data, key, {intial, generate_expire_time(expiration), 0, expiration, current_cas})
             { :reply, {intial, current_cas}, {data, current_cas + 1} }
           value when is_integer(value) ->
             value = value + count
-            if value > 0xffffffffffffffff, do: value = value - 0xffffffffffffffff
+            if value > 0xffffffffffffffff, do: value = value - 0x10000000000000000
             data = Dict.put(data, key, {value, generate_expire_time(expiration), flags, exptime, current_cas})
             { :reply, {value, current_cas}, {data, current_cas + 1} }
           value when is_binary(value) ->
             try do
               value = binary_to_integer(value) + count
-              if value > 0xffffffffffffffff, do: value = value - 0xffffffffffffffff
+              if value > 0xffffffffffffffff, do: value = value - 0x10000000000000000
               data = Dict.put(data, key, {value, generate_expire_time(expiration), flags, exptime, current_cas})
               { :reply, {value, current_cas}, {data, current_cas + 1} }
             catch
               :error, :badarg ->
-                { :reply, :invalid, {data, current_cas} }
+                { :reply, :invalid_incr_decr, {data, current_cas} }
             end
           _ ->
-            { :reply, :invalid, {data, current_cas} }
+            { :reply, :invalid_incr_decr, {data, current_cas} }
         end
       nil when expiration == 0xffffffff ->
         { :reply, :not_found, {data, current_cas} }
@@ -172,7 +200,7 @@ defmodule MemcachedE.Worker do
       {value, timestamp, flags, exptime, _} ->
         case check_expiration(value, timestamp, exptime) do
           nil when expiration == 0xffffffff ->
-            Lager.info "item expired for key #{key}"
+            # Lager.info "item expired for key #{key}"
             { :reply, :not_found, {HashDict.delete(data, key), current_cas} }
           nil ->
             data = Dict.put(data, key, {intial, generate_expire_time(expiration), 0, expiration, current_cas})
@@ -184,16 +212,16 @@ defmodule MemcachedE.Worker do
             { :reply, {value, current_cas}, {data, current_cas + 1} }
           value when is_binary(value) ->
             try do
-              value = value - count
+              value = binary_to_integer(value) - count
               if value < 0, do: value = 0
               data = Dict.put(data, key, {value, generate_expire_time(expiration), flags, exptime, current_cas})
               { :reply, {value, current_cas}, {data, current_cas + 1} }
             catch
               :error, :badarg ->
-                { :reply, :invalid, {data, current_cas} }
+                { :reply, :invalid_incr_decr, {data, current_cas} }
             end
           _ ->
-            { :reply, :invalid, {data, current_cas} }
+            { :reply, :invalid_incr_decr, {data, current_cas} }
         end
       nil when expiration == 0xffffffff ->
         { :reply, :not_found, {data, current_cas} }

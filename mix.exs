@@ -15,7 +15,7 @@ defmodule MemcachedE.Mixfile do
       mod: { MemcachedE, [] },
       applications: [:xgen, :exlager, :ranch],
       # application configuration goes here:
-      env: [listen_port: 8080, max_data_size: 1024*1024]
+      env: [listen_port: 8080, max_data_size: 1024*1024, max_connections: 1024]
     ]
   end
 
