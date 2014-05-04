@@ -12,7 +12,7 @@ defmodule ExMemcached.BinaryCommands do
   def send_response_header(server_state, opcode, keylen, extlen, datatype, status, bodylen, opaque, cas \\ 0) do
     data = make_response_header(opcode, keylen, extlen, datatype, status, bodylen, opaque, cas)
     # Lager.info "send_response_header: #{inspect data}"
-    Bd.send_data(server_state, data)
+    ServerState.send_data(server_state, data)
   end
 
   def send_response_header_q(server_state, opcode, keylen, extlen, datatype, status, bodylen, opaque, cas \\ 0) do
@@ -23,32 +23,32 @@ defmodule ExMemcached.BinaryCommands do
 
   def send_error(server_state, opcode, opaque, Bd.protocol_binray_response_key_enoent) do
     send_response_header(server_state, opcode, 0, 0, 0, Bd.protocol_binray_response_key_enoent, 9, opaque)
-    Bd.send_data(server_state, <<"Not found">>)
+    ServerState.send_data(server_state, <<"Not found">>)
   end
 
   def send_error(server_state, opcode, opaque, Bd.protocol_binray_response_key_eexists) do
     send_response_header(server_state, opcode, 0, 0, 0, Bd.protocol_binray_response_key_eexists, 6, opaque)
-    Bd.send_data(server_state, <<"Exists">>)
+    ServerState.send_data(server_state, <<"Exists">>)
   end
 
   def send_error(server_state, opcode, opaque, Bd.protocol_binray_response_e2big) do
     send_response_header(server_state, opcode, 0, 0, 0, Bd.protocol_binray_response_e2big, 7, opaque)
-    Bd.send_data(server_state, <<"Too big">>)
+    ServerState.send_data(server_state, <<"Too big">>)
   end
 
   def send_error(server_state, opcode, opaque, Bd.protocol_binray_response_einval) do
     send_response_header(server_state, opcode, 0, 0, 0, Bd.protocol_binray_response_einval, 7, opaque)
-    Bd.send_data(server_state, <<"Invalid">>)
+    ServerState.send_data(server_state, <<"Invalid">>)
   end
 
   def send_error(server_state, opcode, opaque, Bd.protocol_binray_response_not_stored) do
     send_response_header(server_state, opcode, 0, 0, 0, Bd.protocol_binray_response_not_stored, 7, opaque)
-    Bd.send_data(server_state, <<"Not stored">>)
+    ServerState.send_data(server_state, <<"Not stored">>)
   end
 
   def send_error(server_state, opcode, opaque, Bd.protocol_binray_response_delta_badval) do
     send_response_header(server_state, opcode, 0, 0, 0, Bd.protocol_binray_response_delta_badval, 16, opaque)
-    Bd.send_data(server_state, <<"Bad devlta value">>)
+    ServerState.send_data(server_state, <<"Bad devlta value">>)
   end
 
   def send_too_big_response_q(server_state, opcode, opaque) do
@@ -60,7 +60,7 @@ defmodule ExMemcached.BinaryCommands do
     cond do
       size(server_state.stored_responses) > 0 ->
         # Lager.info "Sending stored_responses #{size(server_state.stored_responses)}"
-        Bd.send_data server_state, server_state.stored_responses
+        ServerState.send_data server_state, server_state.stored_responses
         %ServerState{server_state | stored_responses: << >>}
       true ->
         # Lager.info "sending nothing"
@@ -131,15 +131,15 @@ defmodule ExMemcached.BinaryCommands do
     case ExMemcached.get(key) do
       {value, flags, cas} when is_integer(value) ->
         send_response_header(server_state, opcode, 0, 4, 0, Bd.protocol_binray_response_success, 12, opaque, cas)
-        Bd.send_data(server_state, << flags::size(32), value::size(64) >>)
+        ServerState.send_data(server_state, << flags::size(32), value::size(64) >>)
       {value, flags, cas} when is_binary(value) ->
         len = size(value)
         if len > 0 do
           send_response_header(server_state, opcode, 0, 4, 0, Bd.protocol_binray_response_success, len + 4, opaque, cas)
-          Bd.send_data(server_state, << flags::size(32) >> <> value)
+          ServerState.send_data(server_state, << flags::size(32) >> <> value)
         else
           send_response_header(server_state, opcode, 0, 4, 0, Bd.protocol_binray_response_success, 4, opaque, cas)
-          Bd.send_data(server_state, << flags::size(32) >>)
+          ServerState.send_data(server_state, << flags::size(32) >>)
         end
       :not_found -> send_error(server_state, opcode, opaque, Bd.protocol_binray_response_key_enoent)
     end
@@ -152,16 +152,16 @@ defmodule ExMemcached.BinaryCommands do
       {value, flags, cas} when is_integer(value) ->
         keylen = size(key)
         send_response_header(server_state, opcode, 0, 4, 0, Bd.protocol_binray_response_success, 12 + keylen, opaque, cas)
-        Bd.send_data(server_state, << flags::size(32), value::size(64) >>)
+        ServerState.send_data(server_state, << flags::size(32), value::size(64) >>)
       {value, flags, cas} when is_binary(value) ->
         len = size(value)
         keylen = size(key)
         if len > 0 do
           send_response_header(server_state, opcode, keylen, 4, 0, Bd.protocol_binray_response_success, len + keylen + 4, opaque, cas)
-          Bd.send_data(server_state, << flags::size(32) >> <> key <> value)
+          ServerState.send_data(server_state, << flags::size(32) >> <> key <> value)
         else
           send_response_header(server_state, opcode, keylen, 4, 0, Bd.protocol_binray_response_success, keylen + 4, opaque, cas)
-          Bd.send_data(server_state, << flags::size(32) >> <> key)
+          ServerState.send_data(server_state, << flags::size(32) >> <> key)
         end
       :not_found -> send_error(server_state, opcode, opaque, Bd.protocol_binray_response_key_enoent)
     end
@@ -183,7 +183,7 @@ defmodule ExMemcached.BinaryCommands do
           response = make_response_header(opcode, 0, 4, 0, Bd.protocol_binray_response_success, 4, opaque, cas)
             <> << flags::size(32) >>
         end
-        # Bd.send_data(server_state, response)
+        # ServerState.send_data(server_state, response)
         # server_state
         %ServerState{server_state | stored_responses: server_state.stored_responses <> response}
       :not_found -> server_state
@@ -209,7 +209,7 @@ defmodule ExMemcached.BinaryCommands do
           response = make_response_header(opcode, keylen, 4, 0, Bd.protocol_binray_response_success, keylen + extlen, opaque, cas)
             <> << flags::size(32) >> <> key
         end
-        # Bd.send_data(server_state, response)
+        # ServerState.send_data(server_state, response)
         # server_state
         %ServerState{server_state | stored_responses: server_state.stored_responses <> response}
       :not_found -> server_state
@@ -221,15 +221,15 @@ defmodule ExMemcached.BinaryCommands do
     case ExMemcached.gat(key, expirary) do
       {value, flags, cas} when is_integer(value) ->
         send_response_header(server_state, opcode, 0, 4, 0, Bd.protocol_binray_response_success, 12, opaque, cas)
-        Bd.send_data(server_state, << flags::size(32), value::size(64) >>)
+        ServerState.send_data(server_state, << flags::size(32), value::size(64) >>)
       {value, flags, cas} when is_binary(value) ->
         len = size(value)
         if len > 0 do
           send_response_header(server_state, opcode, 0, 4, 0, Bd.protocol_binray_response_success, len + 4, opaque, cas)
-          Bd.send_data(server_state, << flags::size(32) >> <> value)
+          ServerState.send_data(server_state, << flags::size(32) >> <> value)
         else
           send_response_header(server_state, opcode, 0, 4, 0, Bd.protocol_binray_response_success, 4, opaque, cas)
-          Bd.send_data(server_state, << flags::size(32) >>)
+          ServerState.send_data(server_state, << flags::size(32) >>)
         end
       :not_found -> send_error(server_state, opcode, opaque, Bd.protocol_binray_response_key_enoent)
     end
@@ -242,7 +242,7 @@ defmodule ExMemcached.BinaryCommands do
       :invalid_incr_decr -> send_error(server_state, opcode, opaque, Bd.protocol_binray_response_delta_badval)
       {value, cas} ->
         send_response_header(server_state, opcode, 0, 0, 0, Bd.protocol_binray_response_success, 8, opaque, cas)
-        Bd.send_data(server_state, << value::size(64) >>)
+        ServerState.send_data(server_state, << value::size(64) >>)
     end
     server_state
   end
@@ -264,7 +264,7 @@ defmodule ExMemcached.BinaryCommands do
       :invalid_incr_decr -> send_error(server_state, opcode, opaque, Bd.protocol_binray_response_delta_badval)
       {value, cas} ->
         send_response_header(server_state, opcode, 0, 0, 0, Bd.protocol_binray_response_success, 8, opaque, cas)
-        Bd.send_data(server_state, << value::size(64) >>)
+        ServerState.send_data(server_state, << value::size(64) >>)
     end
   end
 
@@ -273,7 +273,7 @@ defmodule ExMemcached.BinaryCommands do
     case ExMemcached.decr(key, count, intial, expiration) do
       :not_found ->
         response = make_response_header(opcode, 0, 0, 0, Bd.protocol_binray_response_key_enoent, 0, opaque)
-        %ServerState{server_state | stored_responses: server_state[:stored_responses] <> response}
+        %ServerState{server_state | stored_responses: server_state.stored_responses <> response}
       _ -> server_state
     end
   end
@@ -283,7 +283,7 @@ defmodule ExMemcached.BinaryCommands do
     {:ok, state} = :application.get_all_key :ex_memcached
     data = <<"#{state[:vsn]}">>
     send_response_header(server_state, opcode, 0, 0, 0, Bd.protocol_binray_response_success, size(data), opaque)
-    Bd.send_data(server_state, data)
+    ServerState.send_data(server_state, data)
   end
 
   def binary_flush_cmd(expiration, opcode, opaque, server_state) do

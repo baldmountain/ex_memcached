@@ -74,11 +74,6 @@ defmodule ExMemcached.BaseDefinitions do
   define protocol_binray_cmd_rdecr, 0x3b
   define protocol_binray_cmd_rdecrq, 0x3c
 
-  def send_data(server_state, data) do
-    server_state.transport.send(server_state.socket, data)
-    server_state
-  end
-
   def opcode_description opcode do
     case opcode do
       0 -> "get"

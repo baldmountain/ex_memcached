@@ -427,7 +427,7 @@ defmodule ExMemcached.Server do
               set_cmd(loop_state, cmd, server_state)
             true ->
               ExMemcached.delete loop_state.key
-              Bd.send_data(server_state, <<"SERVER_ERROR object too large for cache\r\n">>)
+              ServerState.send_data(server_state, <<"SERVER_ERROR object too large for cache\r\n">>)
           end
           loop_state = %LoopState{}
         {:set, _} when cmd_size < data_length ->
@@ -438,7 +438,7 @@ defmodule ExMemcached.Server do
                   set_cmd(loop_state, cmd, server_state)
                 true ->
                   ExMemcached.delete loop_state.key
-                  Bd.send_data(server_state, <<"SERVER_ERROR object too large for cache\r\n">>)
+                  ServerState.send_data(server_state, <<"SERVER_ERROR object too large for cache\r\n">>)
               end
               loop_state = %LoopState{}
               server_state = cond do
@@ -452,7 +452,7 @@ defmodule ExMemcached.Server do
           end
         {:set, _} ->
           ExMemcached.delete loop_state.key
-          Bd.send_data(server_state, << "SERVER_ERROR object too large for cache\r\n" >>)
+          ServerState.send_data(server_state, << "SERVER_ERROR object too large for cache\r\n" >>)
           loop_state = %LoopState{}
         {:commands, "add"} ->
           case parts do
@@ -739,55 +739,55 @@ defmodule ExMemcached.Server do
   end
 
   defp send_error(server_state) do
-    Bd.send_data(server_state, <<"ERROR\r\n">>)
+    ServerState.send_data(server_state, <<"ERROR\r\n">>)
   end
 
   defp send_ascii_reply {:stored, _}, server_state do
-    Bd.send_data(server_state, <<"STORED\r\n">>)
+    ServerState.send_data(server_state, <<"STORED\r\n">>)
   end
 
   defp send_ascii_reply :not_stored, server_state do
-    Bd.send_data(server_state, <<"NOT_STORED\r\n">>)
+    ServerState.send_data(server_state, <<"NOT_STORED\r\n">>)
   end
 
   defp send_ascii_reply :exists, server_state do
-    Bd.send_data(server_state, <<"EXISTS\r\n">>)
+    ServerState.send_data(server_state, <<"EXISTS\r\n">>)
   end
 
   defp send_ascii_reply :not_found, server_state do
-    Bd.send_data(server_state, <<"NOT_FOUND\r\n">>)
+    ServerState.send_data(server_state, <<"NOT_FOUND\r\n">>)
   end
 
   defp send_ascii_reply :deleted, server_state do
-    Bd.send_data(server_state, <<"DELETED\r\n">>)
+    ServerState.send_data(server_state, <<"DELETED\r\n">>)
   end
 
   defp send_ascii_reply :touched, server_state do
-    Bd.send_data(server_state, <<"TOUCHED\r\n">>)
+    ServerState.send_data(server_state, <<"TOUCHED\r\n">>)
   end
 
   defp send_ascii_reply :ok, server_state do
-    Bd.send_data(server_state, <<"OK\r\n">>)
+    ServerState.send_data(server_state, <<"OK\r\n">>)
   end
 
   defp send_ascii_reply {value, _cas}, server_state do
-    Bd.send_data(server_state, <<"#{value}\r\n">>)
+    ServerState.send_data(server_state, <<"#{value}\r\n">>)
   end
 
   defp send_ascii_reply :invalid_incr_decr, server_state do
-    Bd.send_data(server_state, <<"CLIENT_ERROR cannot increment or decrement non-numeric value\r\n">>)
+    ServerState.send_data(server_state, <<"CLIENT_ERROR cannot increment or decrement non-numeric value\r\n">>)
   end
 
   defp send_ascii_reply :bad_command_line, server_state do
-    Bd.send_data(server_state, <<"CLIENT_ERROR bad command line format\r\n">>)
+    ServerState.send_data(server_state, <<"CLIENT_ERROR bad command line format\r\n">>)
   end
 
   defp send_ascii_reply :bad_delete_command_line, server_state do
-    Bd.send_data(server_state, <<"CLIENT_ERROR bad command line format.  Usage: delete <key> [noreply]\r\n">>)
+    ServerState.send_data(server_state, <<"CLIENT_ERROR bad command line format.  Usage: delete <key> [noreply]\r\n">>)
   end
 
   defp send_ascii_reply :flush_disabled, server_state do
-    Bd.send_data(server_state, <<"CLIENT_ERROR flush_all not allowed\r\n">>)
+    ServerState.send_data(server_state, <<"CLIENT_ERROR flush_all not allowed\r\n">>)
   end
 
   defp send_ascii_reply _, server_state do
@@ -880,7 +880,7 @@ defmodule ExMemcached.Server do
   end
 
   defp get_cmd([], buffer, server_state) do
-    Bd.send_data(server_state, buffer <> <<"END\r\n">>)
+    ServerState.send_data(server_state, buffer <> <<"END\r\n">>)
   end
 
   defp gets_cmd([key|tail], server_state) do
@@ -906,7 +906,7 @@ defmodule ExMemcached.Server do
   end
 
   defp gets_cmd([], buffer, server_state) do
-    Bd.send_data(server_state, buffer <> <<"END\r\n">>)
+    ServerState.send_data(server_state, buffer <> <<"END\r\n">>)
   end
 
   defp delete_cmd([key], server_state) do
@@ -979,31 +979,31 @@ defmodule ExMemcached.Server do
   end
 
   defp stats_cmd(["stats", "cachedump", "1", "0", "0"], server_state) do
-    Bd.send_data(server_state, <<"END\r\n">>)
+    ServerState.send_data(server_state, <<"END\r\n">>)
   end
 
   defp stats_cmd(["stats", "cachedump", "200", "0", "0"], server_state) do
-    Bd.send_data(server_state, <<"CLIENT_ERROR\r\n">>)
+    ServerState.send_data(server_state, <<"CLIENT_ERROR\r\n">>)
   end
 
   defp stats_cmd(["stats", "slabs"], server_state) do
-    Bd.send_data(server_state, <<"STAT total_malloced 4294967328\r\n">>)
-    Bd.send_data(server_state, <<"STAT active_slabs 0\r\n">>)
-    Bd.send_data(server_state, <<"END\r\n">>)
+    ServerState.send_data(server_state, <<"STAT total_malloced 4294967328\r\n">>)
+    ServerState.send_data(server_state, <<"STAT active_slabs 0\r\n">>)
+    ServerState.send_data(server_state, <<"END\r\n">>)
   end
 
   defp stats_cmd(["stats", _value], server_state) do
-    Bd.send_data(server_state, <<"END\r\n">>)
+    ServerState.send_data(server_state, <<"END\r\n">>)
   end
 
   defp stats_cmd(["stats", _value, _parameter], server_state) do
-    Bd.send_data(server_state, <<"END\r\n">>)
+    ServerState.send_data(server_state, <<"END\r\n">>)
   end
 
   defp stats_cmd(["stats"], server_state) do
-    Bd.send_data(server_state, <<"STAT pointer_size 64\r\n">>)
-    Bd.send_data(server_state, <<"STAT limit_maxbytes 4297064448\r\n">>)
-    Bd.send_data(server_state, <<"END\r\n">>)
+    ServerState.send_data(server_state, <<"STAT pointer_size 64\r\n">>)
+    ServerState.send_data(server_state, <<"STAT limit_maxbytes 4297064448\r\n">>)
+    ServerState.send_data(server_state, <<"END\r\n">>)
   end
 
   def read_remainder_ascii(server_state, data, expected) do
@@ -1074,7 +1074,7 @@ defmodule ExMemcached.Server do
     keylen = size(key)
     value_len = size(value)
     B.send_response_header(server_state, opcode, keylen, 0, 0, Bd.protocol_binray_response_success, keylen + value_len, opaque)
-    Bd.send_data(server_state, key <> value)
+    ServerState.send_data(server_state, key <> value)
   end
 
 end
