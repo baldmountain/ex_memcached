@@ -4,10 +4,9 @@ defmodule ExMemcached.Server do
   require ExMemcached.BaseDefinitions
   alias ExMemcached.BaseDefinitions, as: Bd
   alias ExMemcached.BinaryCommands, as: B
+  alias ExMemcached.ServerState, as: ServerState
 
   @receive_timeout 5000
-
-  defrecord ServerState, socket: nil, transport: nil, existing_data: "", stored_responses: << >>
 
   def start_link(ref, socket, transport, opts) do
     pid = spawn_link(__MODULE__, :init, [ref, socket, transport, opts])
@@ -16,26 +15,26 @@ defmodule ExMemcached.Server do
 
   def init(ref, socket, transport, _opts \\ []) do
     :ok = :ranch.accept_ack(ref)
-    loop(ServerState[socket: socket, transport: transport])
+    loop(%ServerState{socket: socket, transport: transport})
   end
 
   defp loop(server_state) do
   	case server_state.transport.recv(server_state.socket, 0, @receive_timeout) do
   		{:ok, data} ->
         data = server_state.existing_data <> data
-        server_state = server_state.existing_data ""
+        server_state = %ServerState{server_state | existing_data: ""}
         if String.starts_with?(data, << Bd.protocol_binary_req >>) do
           server_state = handle_binary_protocol(server_state, data)
         else
           if String.contains?(data, "\r\n") do
             server_state = handle_ascii_protocol(server_state, data)
           else
-            server_state = server_state.existing_data(server_state.existing_data <> data)
+            server_state = %ServerState{server_state | existing_data: server_state.existing_data <> data}
           end
         end
   			loop(server_state)
   		_res ->
-  			:ok = close_transport(server_state)
+  			:ok = ServerState.close_transport(server_state)
   	end
   end
 
@@ -52,7 +51,7 @@ defmodule ExMemcached.Server do
 
       if keylen > 250 do
         B.send_error(server_state, opcode, opaque, Bd.protocol_binray_response_e2big)
-        close_transport(server_state)
+        ServerState.close_transport(server_state)
       else
         case opcode do
           Bd.protocol_binray_cmd_noop ->
@@ -61,9 +60,9 @@ defmodule ExMemcached.Server do
           Bd.protocol_binray_cmd_quit ->
             server_state = B.send_stored_responses
             server_state = B.send_response_header(server_state, opcode, 0, 0, 0, Bd.protocol_binray_response_success, 0, opaque)
-            close_transport(server_state)
+            ServerState.close_transport(server_state)
           Bd.protocol_binray_cmd_quitq ->
-            close_transport(server_state)
+            ServerState.close_transport(server_state)
           Bd.protocol_binray_cmd_set when extlen == 8 ->
             tail = read_expected server_state, tail, extlen + keylen
             data_len = bodylen - extlen - keylen
@@ -368,14 +367,16 @@ defmodule ExMemcached.Server do
     server_state
   end
 
-  defrecord LoopState, state: :commands, key: nil, flags: 0, exptime: 0, cas: 0, data_length: 0, no_reply: nil
+  defmodule LoopState do
+    defstruct state: :commands, key: nil, flags: 0, exptime: 0, cas: 0, data_length: 0, no_reply: nil
+  end
 
   defp handle_ascii_protocol(server_state, data) do
     cmds = String.split data, "\r\n"
     if size(List.last(cmds)) == 0, do: cmds = List.delete_at(cmds, -1)
     # Lager.info "cmds: #{inspect cmds}"
 
-    {server_state, _} = Enum.reduce cmds, {server_state, LoopState.new}, fn(cmd, {server_state, loop_state}) ->
+    {server_state, _} = Enum.reduce cmds, {server_state, %LoopState{} }, fn(cmd, {server_state, loop_state}) ->
       command = if (loop_state.state == :commands) do
         parts = String.split cmd, " "
         List.first(parts)
@@ -387,38 +388,38 @@ defmodule ExMemcached.Server do
         {:commands, "get"} ->
           [_|tail] = parts
           get_cmd(tail, server_state)
-          loop_state = LoopState.new
+          loop_state = %LoopState{}
         {:commands, "gets"} ->
           [_|tail] = parts
           gets_cmd(tail, server_state)
-          loop_state = LoopState.new
+          loop_state = %LoopState{}
         {:commands, "set"} ->
           case parts do
             [_, k, flags, exptime, data_length] ->
               loop_state = try do
-                LoopState[state: :set, key: k, flags: binary_to_integer(flags), exptime: binary_to_integer(exptime), data_length: binary_to_integer(data_length)]
+                %LoopState{state: :set, key: k, flags: binary_to_integer(flags), exptime: binary_to_integer(exptime), data_length: binary_to_integer(data_length)}
               catch
                 :error, :badarg ->
                   send_ascii_reply :bad_command_line, server_state
-                  LoopState.new
+                  %LoopState{}
                 what, value ->
                   Lager.info "3> Caught #{inspect what} with #{inspect value}"
-                  LoopState.new
+                  %LoopState{}
               end
             [_, k, flags, exptime, data_length, nr] ->
               loop_state = try do
-                LoopState[state: :set, key: k, flags: binary_to_integer(flags), exptime: binary_to_integer(exptime), data_length: binary_to_integer(data_length), no_reply: nr]
+                %LoopState{state: :set, key: k, flags: binary_to_integer(flags), exptime: binary_to_integer(exptime), data_length: binary_to_integer(data_length), no_reply: nr}
               catch
                 :error, :badarg ->
                   send_ascii_reply :bad_command_line, server_state
-                  LoopState.new
+                  %LoopState{}
                 what, value ->
                   Lager.info "4> Caught #{inspect what} with #{inspect value}"
-                  LoopState.new
+                  %LoopState{}
               end
             _ ->
               send_error(server_state)
-              loop_state = LoopState.new
+              loop_state = %LoopState{}
           end
         {:set, _} when cmd_size == data_length ->
           cond do
@@ -428,7 +429,7 @@ defmodule ExMemcached.Server do
               ExMemcached.delete loop_state.key
               Bd.send_data(server_state, <<"SERVER_ERROR object too large for cache\r\n">>)
           end
-          loop_state = LoopState.new
+          loop_state = %LoopState{}
         {:set, _} when cmd_size < data_length ->
           case read_remainder_ascii(server_state, cmd, data_length) do
             {cmd, rest} ->
@@ -439,296 +440,296 @@ defmodule ExMemcached.Server do
                   ExMemcached.delete loop_state.key
                   Bd.send_data(server_state, <<"SERVER_ERROR object too large for cache\r\n">>)
               end
-              loop_state = LoopState.new
+              loop_state = %LoopState{}
               server_state = cond do
                 size(rest) > 0 ->
-                  server_state.existing_data(rest)
+                  %ServerState{server_state | existing_data: rest}
                 true -> server_state
               end
             _ ->
-              loop_state = LoopState.new
+              loop_state = %LoopState{}
               :ok
           end
         {:set, _} ->
           ExMemcached.delete loop_state.key
           Bd.send_data(server_state, << "SERVER_ERROR object too large for cache\r\n" >>)
-          loop_state = LoopState.new
+          loop_state = %LoopState{}
         {:commands, "add"} ->
           case parts do
             [_, k, flags, exptime, data_length] ->
               loop_state = try do
-                LoopState[state: :add, key: k, flags: binary_to_integer(flags), exptime: binary_to_integer(exptime), data_length: binary_to_integer(data_length)]
+                %LoopState{state: :add, key: k, flags: binary_to_integer(flags), exptime: binary_to_integer(exptime), data_length: binary_to_integer(data_length)}
               catch
                 :error, :badarg ->
                   send_ascii_reply :bad_command_line, server_state
-                  LoopState.new
+                  %LoopState{}
                 what, value ->
                   Lager.info "5> Caught #{inspect what} with #{inspect value}"
-                  LoopState.new
+                  %LoopState{}
               end
             [_, k, flags, exptime, data_length, nr] ->
               loop_state = try do
-                LoopState[state: :add, key: k, flags: binary_to_integer(flags), exptime: binary_to_integer(exptime), data_length: binary_to_integer(data_length), no_reply: nr]
+                %LoopState{state: :add, key: k, flags: binary_to_integer(flags), exptime: binary_to_integer(exptime), data_length: binary_to_integer(data_length), no_reply: nr}
               catch
                 :error, :badarg ->
                   send_ascii_reply :bad_command_line, server_state
-                  LoopState.new
+                  %LoopState{}
                 what, value ->
                   Lager.info "6> Caught #{inspect what} with #{inspect value}"
-                  LoopState.new
+                  %LoopState{}
               end
             _ ->
               send_error(server_state)
-              loop_state = LoopState.new
+              loop_state = %LoopState{}
           end
         {:add, _} when cmd_size == data_length ->
           add_cmd(loop_state, cmd, server_state)
-          loop_state = LoopState.new
+          loop_state = %LoopState{}
         {:add, _} when cmd_size < data_length ->
           case read_remainder_ascii(server_state, cmd, data_length) do
             {cmd, rest} ->
               add_cmd(loop_state, cmd, server_state)
-              loop_state = LoopState.new
+              loop_state = %LoopState{}
               server_state = cond do
-                size(rest) > 0 -> server_state.existing_data(rest)
+                size(rest) > 0 -> %ServerState{server_state | existing_data: rest}
                 true -> server_state
               end
             _ ->
-              loop_state = LoopState.new
+              loop_state = %LoopState{}
               :ok
           end
         {:add, _} ->
           Lager.info "bad data length"
           send_error(server_state)
-          loop_state = LoopState.new
+          loop_state = %LoopState{}
         {:commands, "replace"} ->
           case parts do
             [_, k, flags, exptime, data_length] ->
               loop_state = try do
-                LoopState[state: :replace, key: k, flags: binary_to_integer(flags), exptime: binary_to_integer(exptime), data_length: binary_to_integer(data_length)]
+                %LoopState{state: :replace, key: k, flags: binary_to_integer(flags), exptime: binary_to_integer(exptime), data_length: binary_to_integer(data_length)}
               catch
                 :error, :badarg ->
                   send_ascii_reply :bad_command_line, server_state
-                  LoopState.new
+                  %LoopState{}
                 what, value ->
                   Lager.info "7> Caught #{inspect what} with #{inspect value}"
-                  LoopState.new
+                  %LoopState{}
               end
             [_, k, flags, exptime, data_length, nr] ->
               loop_state = try do
-                LoopState[state: :replace, key: k, flags: binary_to_integer(flags), exptime: binary_to_integer(exptime), data_length: binary_to_integer(data_length), no_reply: nr]
+                %LoopState{state: :replace, key: k, flags: binary_to_integer(flags), exptime: binary_to_integer(exptime), data_length: binary_to_integer(data_length), no_reply: nr}
               catch
                 :error, :badarg ->
                   send_ascii_reply :bad_command_line, server_state
-                  LoopState.new
+                  %LoopState{}
                 what, value ->
                   Lager.info "8> Caught #{inspect what} with #{inspect value}"
-                  LoopState.new
+                  %LoopState{}
               end
             _ ->
               send_error(server_state)
-              loop_state = LoopState.new
+              loop_state = %LoopState{}
           end
         {:replace, _} when cmd_size == data_length ->
           replace_cmd(loop_state, cmd, server_state)
-          loop_state = LoopState.new
+          loop_state = %LoopState{}
         {:replace, _} when cmd_size < data_length ->
           case read_remainder_ascii(server_state, cmd, data_length) do
             {cmd, rest} ->
               replace_cmd(loop_state, cmd, server_state)
-              loop_state = LoopState.new
+              loop_state = %LoopState{}
               server_state = cond do
-                size(rest) > 0 -> server_state.existing_data(rest)
+                size(rest) > 0 -> %ServerState{server_state | existing_data: rest}
                 true -> server_state
               end
             _ ->
-              loop_state = LoopState.new
+              loop_state = %LoopState{}
               :ok
           end
         {:replace, _} ->
           Lager.info "bad data length"
           send_error(server_state)
-          loop_state = LoopState.new
+          loop_state = %LoopState{}
         {:commands, "append"} ->
           case parts do
             [_, k, flags, exptime, data_length] ->
               loop_state = try do
-                LoopState[state: :append, key: k, flags: binary_to_integer(flags), exptime: binary_to_integer(exptime), data_length: binary_to_integer(data_length)]
+                %LoopState{state: :append, key: k, flags: binary_to_integer(flags), exptime: binary_to_integer(exptime), data_length: binary_to_integer(data_length)}
               catch
                 :error, :badarg ->
                   send_ascii_reply :bad_command_line, server_state
-                  LoopState.new
+                  %LoopState{}
                 what, value ->
                   Lager.info "9> Caught #{inspect what} with #{inspect value}"
-                  LoopState.new
+                  %LoopState{}
               end
             [_, k, flags, exptime, data_length, nr] ->
               loop_state = try do
-                LoopState[state: :append, key: k, flags: binary_to_integer(flags), exptime: binary_to_integer(exptime), data_length: binary_to_integer(data_length), no_reply: nr]
+                %LoopState{state: :append, key: k, flags: binary_to_integer(flags), exptime: binary_to_integer(exptime), data_length: binary_to_integer(data_length), no_reply: nr}
               catch
                 :error, :badarg ->
                   send_ascii_reply :bad_command_line, server_state
-                  LoopState.new
+                  %LoopState{}
                 what, value ->
                   Lager.info "10> Caught #{inspect what} with #{inspect value}"
-                  LoopState.new
+                  %LoopState{}
               end
             _ ->
               send_error(server_state)
-              loop_state = LoopState.new
+              loop_state = %LoopState{}
           end
         {:append, _} when cmd_size == data_length ->
           append_cmd(loop_state, cmd, server_state)
-          loop_state = LoopState.new
+          loop_state = %LoopState{}
         {:append, _} when cmd_size < data_length ->
           case read_remainder_ascii(server_state, cmd, data_length) do
             {cmd, rest} ->
               append_cmd(loop_state, cmd, server_state)
-              loop_state = LoopState.new
+              loop_state = %LoopState{}
               server_state = cond do
-                size(rest) > 0 -> server_state.existing_data(rest)
+                size(rest) > 0 -> %ServerState{server_state | existing_data: rest}
                 true -> server_state
               end
             _ ->
-              loop_state = LoopState.new
+              loop_state = %LoopState{}
               :ok
           end
         {:append, _} ->
           Lager.info "bad data length"
           send_error(server_state)
-          loop_state = LoopState.new
+          loop_state = %LoopState{}
         {:commands, "prepend"} ->
           case parts do
             [_, k, flags, exptime, data_length] ->
               loop_state = try do
-                LoopState[state: :prepend, key: k, flags: binary_to_integer(flags), exptime: binary_to_integer(exptime), data_length: binary_to_integer(data_length)]
+                %LoopState{state: :prepend, key: k, flags: binary_to_integer(flags), exptime: binary_to_integer(exptime), data_length: binary_to_integer(data_length)}
               catch
                 :error, :badarg ->
                   send_ascii_reply :bad_command_line, server_state
-                  LoopState.new
+                  %LoopState{}
                 what, value ->
                   Lager.info "11> Caught #{inspect what} with #{inspect value}"
-                  LoopState.new
+                  %LoopState{}
               end
             [_, k, flags, exptime, data_length, nr] ->
               loop_state = try do
-                LoopState[state: :prepend, key: k, flags: binary_to_integer(flags), exptime: binary_to_integer(exptime), data_length: binary_to_integer(data_length), no_reply: nr]
+                %LoopState{state: :prepend, key: k, flags: binary_to_integer(flags), exptime: binary_to_integer(exptime), data_length: binary_to_integer(data_length), no_reply: nr}
               catch
                 :error, :badarg ->
                   send_ascii_reply :bad_command_line, server_state
-                  LoopState.new
+                  %LoopState{}
                 what, value ->
                   Lager.info "12> Caught #{inspect what} with #{inspect value}"
-                  LoopState.new
+                  %LoopState{}
               end
             _ ->
               send_error(server_state)
-              loop_state = LoopState.new
+              loop_state = %LoopState{}
           end
         {:prepend, _} when cmd_size == data_length ->
           prepend_cmd(loop_state, cmd, server_state)
-          loop_state = LoopState.new
+          loop_state = %LoopState{}
         {:prepend, _} when cmd_size < data_length ->
           case read_remainder_ascii(server_state, cmd, data_length) do
             {cmd, rest} ->
               prepend_cmd(loop_state, cmd, server_state)
-              loop_state = LoopState.new
+              loop_state = %LoopState{}
               server_state = cond do
-                size(rest) > 0 -> server_state.existing_data(rest)
+                size(rest) > 0 -> %ServerState{server_state | existing_data: rest}
                 true -> server_state
               end
             _ ->
-              loop_state = LoopState.new
+              loop_state = %LoopState{}
               :ok
           end
         {:prepend, _} ->
           Lager.info "bad data length"
           send_error(server_state)
-          loop_state = LoopState.new
+          loop_state = %LoopState{}
         {:commands, "cas"} ->
           case parts do
             [_, k, flags, exptime, data_length, cas] when size(cas) > 0->
               loop_state = try do
-                LoopState[state: :cas, key: k, flags: binary_to_integer(flags), exptime: binary_to_integer(exptime), data_length: binary_to_integer(data_length), cas: binary_to_integer(cas)]
+                %LoopState{state: :cas, key: k, flags: binary_to_integer(flags), exptime: binary_to_integer(exptime), data_length: binary_to_integer(data_length), cas: binary_to_integer(cas)}
               catch
                 :error, :badarg ->
                   send_ascii_reply :bad_command_line, server_state
-                  LoopState.new
+                  %LoopState{}
                 what, value ->
                   Lager.info "13> Caught #{inspect what} with #{inspect value}"
-                  LoopState.new
+                  %LoopState{}
               end
             [_, k, flags, exptime, data_length, cas, nr] when size(cas) > 0->
               loop_state = try do
-                LoopState[state: :cas, key: k, flags: binary_to_integer(flags), exptime: binary_to_integer(exptime), data_length: binary_to_integer(data_length), cas: binary_to_integer(cas), no_reply: nr]
+                %LoopState{state: :cas, key: k, flags: binary_to_integer(flags), exptime: binary_to_integer(exptime), data_length: binary_to_integer(data_length), cas: binary_to_integer(cas), no_reply: nr}
               catch
                 :error, :badarg ->
                   send_ascii_reply :bad_command_line, server_state
-                  LoopState.new
+                  %LoopState{}
                 what, value ->
                   Lager.info "14> Caught #{inspect what} with #{inspect value}"
-                  LoopState.new
+                  %LoopState{}
               end
             _ ->
               send_error(server_state)
-              loop_state = loop_state.state :commands
+              loop_state = %LoopState{loop_state | state: :commands}
           end
         {:cas, _} when cmd_size == data_length ->
           cas_cmd(loop_state, cmd, server_state)
-          loop_state = LoopState.new
+          loop_state = %LoopState{}
         {:cas, _} when cmd_size < data_length ->
           case read_remainder_ascii(server_state, cmd, data_length) do
             {cmd, rest} ->
               cas_cmd(loop_state, cmd, server_state)
-              loop_state = LoopState.new
+              loop_state = %LoopState{}
               server_state = cond do
-                size(rest) > 0 -> server_state.existing_data(rest)
+                size(rest) > 0 -> %ServerState{ server_state | existing_data: rest}
                 true -> server_state
               end
             _ ->
-              loop_state = LoopState.new
+              loop_state = %LoopState{}
               :ok
           end
         {:cas, _} ->
           Lager.info "bad data length"
           send_error(server_state)
-          loop_state = LoopState.new
+          loop_state = %LoopState{}
         {:commands, "delete"} ->
           [_|tail] = parts
           delete_cmd(tail, server_state)
-          loop_state = LoopState.new
+          loop_state = %LoopState{}
         {:commands, "incr"} ->
           [_|tail] = parts
           incr_cmd(tail, server_state)
-          loop_state = LoopState.new
+          loop_state = %LoopState{}
         {:commands, "decr"} ->
           [_|tail] = parts
           decr_cmd(tail, server_state)
-          loop_state = LoopState.new
+          loop_state = %LoopState{}
         {:commands, "touch"} ->
           [_|tail] = parts
           touch_cmd(tail, server_state)
-          loop_state = LoopState.new
+          loop_state = %LoopState{}
         {:commands, "flush_all"} ->
           [_|tail] = parts
           flush_all_cmd(tail, server_state)
-          loop_state = LoopState.new
+          loop_state = %LoopState{}
         {:commands, "stats"} ->
           stats_cmd(parts, server_state)
-          loop_state = LoopState.new
+          loop_state = %LoopState{}
         {:commands, "shutdown"} ->
-          close_transport(server_state)
-          loop_state = LoopState.new
+          ServerState.close_transport(server_state)
+          loop_state = %LoopState{}
         {:commands, "quit"} ->
-          close_transport(server_state)
-          loop_state = LoopState.new
+          ServerState.close_transport(server_state)
+          loop_state = %LoopState{}
         {:commands, << >>} when cmd_size == 0 ->
           # blank so just skip to next one
-          loop_state = LoopState.new
+          loop_state = %LoopState{}
         {_, _} ->
           Lager.info "unknown command: #{cmd} in loop_state: #{inspect loop_state}"
           send_error(server_state)
-          loop_state = LoopState.new
+          loop_state = %LoopState{}
       end
       # Lager.info ">>> loop_state: #{inspect loop_state}"
       { server_state, loop_state }
@@ -793,7 +794,7 @@ defmodule ExMemcached.Server do
     send_error(server_state)
   end
 
-  defp set_cmd(loop_state = LoopState[no_reply: nil], value, server_state) do
+  defp set_cmd(loop_state = %LoopState{no_reply: nil}, value, server_state) do
     send_ascii_reply(ExMemcached.set(loop_state.key, value, loop_state.flags, loop_state.exptime, 0), server_state)
   end
 
@@ -801,7 +802,7 @@ defmodule ExMemcached.Server do
     ExMemcached.set(loop_state.key, value, loop_state.flags, loop_state.exptime, 0)
   end
 
-  defp add_cmd(loop_state = LoopState[no_reply: nil], value, server_state) do
+  defp add_cmd(loop_state = %LoopState{no_reply: nil}, value, server_state) do
     send_ascii_reply(ExMemcached.add(loop_state.key, value, loop_state.flags, loop_state.exptime), server_state)
   end
 
@@ -809,7 +810,7 @@ defmodule ExMemcached.Server do
     ExMemcached.add(loop_state.key, value, loop_state.flags, loop_state.exptime)
   end
 
-  defp replace_cmd(loop_state = LoopState[no_reply: nil], value, server_state) do
+  defp replace_cmd(loop_state = %LoopState{no_reply: nil}, value, server_state) do
     send_ascii_reply(ExMemcached.replace(loop_state.key, value, loop_state.flags, loop_state.exptime), server_state)
   end
 
@@ -817,7 +818,7 @@ defmodule ExMemcached.Server do
     ExMemcached.replace(loop_state.key, value, loop_state.flags, loop_state.exptime)
   end
 
-  defp append_cmd(loop_state = LoopState[no_reply: nil], value, server_state) do
+  defp append_cmd(loop_state = %LoopState{no_reply: nil}, value, server_state) do
     send_ascii_reply(ExMemcached.append(loop_state.key, value, loop_state.flags, loop_state.exptime), server_state)
   end
 
@@ -825,7 +826,7 @@ defmodule ExMemcached.Server do
     ExMemcached.append(loop_state.key, value, loop_state.flags, loop_state.exptime)
   end
 
-  defp prepend_cmd(loop_state = LoopState[no_reply: nil], value, server_state) do
+  defp prepend_cmd(loop_state = %LoopState{no_reply: nil}, value, server_state) do
     send_ascii_reply(ExMemcached.prepend(loop_state.key, value, loop_state.flags, loop_state.exptime), server_state)
   end
 
@@ -833,7 +834,7 @@ defmodule ExMemcached.Server do
     ExMemcached.prepend(loop_state.key, value, loop_state.flags, loop_state.exptime)
   end
 
-  defp cas_cmd(loop_state = LoopState[no_reply: nil], value, server_state) do
+  defp cas_cmd(loop_state = %LoopState{no_reply: nil}, value, server_state) do
     case loop_state.cas do
       # this is a special case a REAL cas wll neve be 0. This means someone sent an invalid cas. Since
       # we use the same backend as the biary commands a zero means don't check cas so send a -1 instead
@@ -1019,7 +1020,7 @@ defmodule ExMemcached.Server do
             read_remainder_ascii(server_state, data <> read, expected)
           res ->
             Lager.info "read_remainder_ascii res: #{inspect res}"
-            :ok = close_transport(server_state)
+            :ok = ServerState.close_transport(server_state)
             nil
         end
     end
@@ -1037,7 +1038,7 @@ defmodule ExMemcached.Server do
             read_remainder(server_state, data <> read, expected)
           res ->
             Lager.info "read_remainder res: #{inspect res}"
-            :ok = close_transport(server_state)
+            :ok = ServerState.close_transport(server_state)
             nil
         end
     end
@@ -1052,7 +1053,7 @@ defmodule ExMemcached.Server do
           data <> read
         res ->
           Lager.info "read_expected res: #{inspect res}"
-          :ok = close_transport(server_state)
+          :ok = ServerState.close_transport(server_state)
           nil
       end
       true -> data
@@ -1067,11 +1068,6 @@ defmodule ExMemcached.Server do
         << _::size(extlen), key::[binary, size(keylen)], data::binary >> = buffer
     end
     {key, data}
-  end
-
-  defp close_transport server_state do
-    :timer.sleep(500)
-    server_state.transport.close(server_state.socket)
   end
 
   def send_stat_response server_state, key, value, opcode, opaque do
