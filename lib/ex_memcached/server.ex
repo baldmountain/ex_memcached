@@ -1,9 +1,9 @@
-defmodule MemcachedE.Server do
+defmodule ExMemcached.Server do
   use GenServer
   require Lager
-  require MemcachedE.BaseDefinitions
-  alias MemcachedE.BaseDefinitions, as: Bd
-  alias MemcachedE.BinaryCommands, as: B
+  require ExMemcached.BaseDefinitions
+  alias ExMemcached.BaseDefinitions, as: Bd
+  alias ExMemcached.BinaryCommands, as: B
 
   @receive_timeout 5000
 
@@ -34,8 +34,7 @@ defmodule MemcachedE.Server do
           end
         end
   			loop(server_state)
-  		res ->
-        Lager.info "loop res: #{inspect res}"
+  		_res ->
   			:ok = close_transport(server_state)
   	end
   end
@@ -70,9 +69,9 @@ defmodule MemcachedE.Server do
             data_len = bodylen - extlen - keylen
             << flags::size(32), exptime::size(32), key::[binary, size(keylen)], data::binary >> = tail
             cond do
-              data_len > Application.get_env(:memcached_e, :max_data_size) ->
+              data_len > Application.get_env(:ex_memcached, :max_data_size) ->
                 # delete if the key exists
-                MemcachedE.delete key
+                ExMemcached.delete key
                 case read_remainder(server_state, data, bodylen - extlen - keylen) do
                   {_data, rest} ->
                     server_state = B.send_error(server_state, opcode, opaque, Bd.protocol_binray_response_e2big)
@@ -92,9 +91,9 @@ defmodule MemcachedE.Server do
             data_len = bodylen - extlen - keylen
             << flags::size(32), exptime::size(32), key::[binary, size(keylen)], data::binary >> = tail
             cond do
-              data_len > Application.get_env(:memcached_e, :max_data_size) ->
+              data_len > Application.get_env(:ex_memcached, :max_data_size) ->
                 # delete if the key exists
-                MemcachedE.delete key
+                ExMemcached.delete key
                 case read_remainder(server_state, data, bodylen - extlen - keylen) do
                   {_data, rest} ->
                     server_state = B.send_error(server_state, opcode, opaque, Bd.protocol_binray_response_e2big)
@@ -104,9 +103,9 @@ defmodule MemcachedE.Server do
               true ->
                 case read_remainder(server_state, data, bodylen - extlen - keylen) do
                   {data, rest} ->
-                    MemcachedE.set(key, data, flags, exptime, cas)
+                    ExMemcached.set(key, data, flags, exptime, cas)
                     server_state = handle_binary_protocol(server_state, rest)
-                  data -> MemcachedE.set(key, data, flags, exptime, cas)
+                  data -> ExMemcached.set(key, data, flags, exptime, cas)
                 end
             end
           Bd.protocol_binray_cmd_add ->
@@ -114,14 +113,14 @@ defmodule MemcachedE.Server do
             data_len = bodylen - extlen - keylen
             << flags::size(32), exptime::size(32), key::[binary, size(keylen)], data::binary >> = tail
             cond do
-              data_len > Application.get_env(:memcached_e, :max_data_size) ->
+              data_len > Application.get_env(:ex_memcached, :max_data_size) ->
                 # delete if the key exists
-                MemcachedE.delete key
+                ExMemcached.delete key
                 server_state = case read_remainder(server_state, data, bodylen - extlen - keylen) do
                   {_data, rest} ->
                     server_state = B.send_stored_responses server_state
                     server_state = B.send_error(server_state, opcode, opaque, Bd.protocol_binray_response_e2big)
-                    server_state = handle_binary_protocol(server_state, rest)
+                    handle_binary_protocol(server_state, rest)
                   _data -> B.send_error(server_state, opcode, opaque, Bd.protocol_binray_response_e2big)
                 end
               true ->
@@ -129,7 +128,7 @@ defmodule MemcachedE.Server do
                   {data, rest} ->
                     server_state = B.send_stored_responses server_state
                     server_state = B.binary_add_cmd(key, data, flags, exptime, opcode, opaque, server_state)
-                    server_state = handle_binary_protocol(server_state, rest)
+                    handle_binary_protocol(server_state, rest)
                   data -> B.binary_add_cmd(key, data, flags, exptime, opcode, opaque, server_state)
                 end
             end
@@ -138,9 +137,9 @@ defmodule MemcachedE.Server do
             data_len = bodylen - extlen - keylen
             << flags::size(32), exptime::size(32), key::[binary, size(keylen)], data::binary >> = tail
             cond do
-              data_len > Application.get_env(:memcached_e, :max_data_size) ->
+              data_len > Application.get_env(:ex_memcached, :max_data_size) ->
                 # delete if the key exists
-                MemcachedE.delete key
+                ExMemcached.delete key
                 case read_remainder(server_state, data, bodylen - extlen - keylen) do
                   {_data, rest} ->
                     B.send_error(server_state, opcode, opaque, Bd.protocol_binray_response_e2big)
@@ -160,9 +159,9 @@ defmodule MemcachedE.Server do
             data_len = bodylen - extlen - keylen
             << flags::size(32), exptime::size(32), key::[binary, size(keylen)], data::binary >> = tail
             cond do
-              data_len > Application.get_env(:memcached_e, :max_data_size) ->
+              data_len > Application.get_env(:ex_memcached, :max_data_size) ->
                 # delete if the key exists
-                MemcachedE.delete key
+                ExMemcached.delete key
                 case read_remainder(server_state, data, bodylen - extlen - keylen) do
                   {_data, rest} ->
                     B.send_error(server_state, opcode, opaque, Bd.protocol_binray_response_e2big)
@@ -182,9 +181,9 @@ defmodule MemcachedE.Server do
             data_len = bodylen - extlen - keylen
             << flags::size(32), exptime::size(32), key::[binary, size(keylen)], data::binary >> = tail
             cond do
-              data_len > Application.get_env(:memcached_e, :max_data_size) ->
+              data_len > Application.get_env(:ex_memcached, :max_data_size) ->
                 # delete if the key exists
-                MemcachedE.delete key
+                ExMemcached.delete key
                 case read_remainder(server_state, data, bodylen - extlen - keylen) do
                   {_data, rest} ->
                     B.send_error(server_state, opcode, opaque, Bd.protocol_binray_response_e2big)
@@ -258,7 +257,7 @@ defmodule MemcachedE.Server do
                 data = tail
               _ ->
                 len = 8 * extlen
-                tail = read_expected server_state, tail, len
+                tail = read_expected server_state, tail, extlen
                 << expiration::size(len), data::binary >> = tail
             end
             server_state = B.binary_flush_cmd(expiration, opcode, opaque, server_state)
@@ -321,11 +320,14 @@ defmodule MemcachedE.Server do
             {key, data} = key_data(extlen, keylen, tail)
             case key do
               "settings" ->
-                send_stat_response server_state, "maxconns", <<"#{Application.get_env(:memcached_e, :max_connections)}">>, opcode, opaque
+                send_stat_response server_state, "maxconns", <<"#{Application.get_env(:ex_memcached, :max_connections)}">>, opcode, opaque
                 send_stat_response server_state, "domain_socket", "NULL", opcode, opaque
                 send_stat_response server_state, "evictions", "on", opcode, opaque
                 send_stat_response server_state, "cas_enabled", "yes", opcode, opaque
-                send_stat_response server_state, "flush_enabled", "yes", opcode, opaque
+                case Application.get_env(:ex_memcached, :disable_flush_all) do
+                  true -> send_stat_response server_state, "flush_enabled", "no", opcode, opaque
+                  false -> send_stat_response server_state, "flush_enabled", "yes", opcode, opaque
+                end
                 B.send_response_header(server_state, opcode, 0, 0, 0, Bd.protocol_binray_response_success, 0, opaque)
               _ ->
                 B.send_response_header(server_state, opcode, 0, 0, 0, Bd.protocol_binray_response_success, 0, opaque)
@@ -391,7 +393,6 @@ defmodule MemcachedE.Server do
           gets_cmd(tail, server_state)
           loop_state = LoopState.new
         {:commands, "set"} ->
-          # Lager.info "set: #{inspect parts}"
           case parts do
             [_, k, flags, exptime, data_length] ->
               loop_state = try do
@@ -421,9 +422,10 @@ defmodule MemcachedE.Server do
           end
         {:set, _} when cmd_size == data_length ->
           cond do
-            data_length <= Application.get_env(:memcached_e, :max_data_size) ->
+            data_length <= Application.get_env(:ex_memcached, :max_data_size) ->
               set_cmd(loop_state, cmd, server_state)
             true ->
+              ExMemcached.delete loop_state.key
               Bd.send_data(server_state, <<"SERVER_ERROR object too large for cache\r\n">>)
           end
           loop_state = LoopState.new
@@ -431,29 +433,27 @@ defmodule MemcachedE.Server do
           case read_remainder_ascii(server_state, cmd, data_length) do
             {cmd, rest} ->
               cond do
-                data_length <= Application.get_env(:memcached_e, :max_data_size) ->
+                data_length <= Application.get_env(:ex_memcached, :max_data_size) ->
                   set_cmd(loop_state, cmd, server_state)
                 true ->
+                  ExMemcached.delete loop_state.key
                   Bd.send_data(server_state, <<"SERVER_ERROR object too large for cache\r\n">>)
               end
               loop_state = LoopState.new
               server_state = cond do
                 size(rest) > 0 ->
-                  # Lager.info "Adding '#{rest}' to existing_data"
                   server_state.existing_data(rest)
                 true -> server_state
               end
             _ ->
-              # Lager.info "set error:"
               loop_state = LoopState.new
               :ok
           end
         {:set, _} ->
-          Lager.info "bad data length"
+          ExMemcached.delete loop_state.key
           Bd.send_data(server_state, << "SERVER_ERROR object too large for cache\r\n" >>)
           loop_state = LoopState.new
         {:commands, "add"} ->
-          # Lager.info "add: #{inspect parts}"
           case parts do
             [_, k, flags, exptime, data_length] ->
               loop_state = try do
@@ -502,7 +502,6 @@ defmodule MemcachedE.Server do
           send_error(server_state)
           loop_state = LoopState.new
         {:commands, "replace"} ->
-          # Lager.info "replace: #{inspect parts}"
           case parts do
             [_, k, flags, exptime, data_length] ->
               loop_state = try do
@@ -551,7 +550,6 @@ defmodule MemcachedE.Server do
           send_error(server_state)
           loop_state = LoopState.new
         {:commands, "append"} ->
-          # Lager.info "append: #{inspect parts}"
           case parts do
             [_, k, flags, exptime, data_length] ->
               loop_state = try do
@@ -600,7 +598,6 @@ defmodule MemcachedE.Server do
           send_error(server_state)
           loop_state = LoopState.new
         {:commands, "prepend"} ->
-          # Lager.info "prepend: #{inspect parts}"
           case parts do
             [_, k, flags, exptime, data_length] ->
               loop_state = try do
@@ -649,10 +646,8 @@ defmodule MemcachedE.Server do
           send_error(server_state)
           loop_state = LoopState.new
         {:commands, "cas"} ->
-          # Lager.info "cas: #{inspect parts}"
           case parts do
             [_, k, flags, exptime, data_length, cas] when size(cas) > 0->
-              # Lager.info "size(cas): #{size(cas)}"
               loop_state = try do
                 LoopState[state: :cas, key: k, flags: binary_to_integer(flags), exptime: binary_to_integer(exptime), data_length: binary_to_integer(data_length), cas: binary_to_integer(cas)]
               catch
@@ -664,7 +659,6 @@ defmodule MemcachedE.Server do
                   LoopState.new
               end
             [_, k, flags, exptime, data_length, cas, nr] when size(cas) > 0->
-              # Lager.info "size(cas): #{size(cas)}"
               loop_state = try do
                 LoopState[state: :cas, key: k, flags: binary_to_integer(flags), exptime: binary_to_integer(exptime), data_length: binary_to_integer(data_length), cas: binary_to_integer(cas), no_reply: nr]
               catch
@@ -715,6 +709,10 @@ defmodule MemcachedE.Server do
           [_|tail] = parts
           touch_cmd(tail, server_state)
           loop_state = LoopState.new
+        {:commands, "flush_all"} ->
+          [_|tail] = parts
+          flush_all_cmd(tail, server_state)
+          loop_state = LoopState.new
         {:commands, "stats"} ->
           stats_cmd(parts, server_state)
           loop_state = LoopState.new
@@ -724,8 +722,9 @@ defmodule MemcachedE.Server do
         {:commands, "quit"} ->
           close_transport(server_state)
           loop_state = LoopState.new
-        {_, _} when cmd_size == 0 ->
-          Bd.send_data(server_state, <<"END\r\n">>)
+        {:commands, << >>} when cmd_size == 0 ->
+          # blank so just skip to next one
+          loop_state = LoopState.new
         {_, _} ->
           Lager.info "unknown command: #{cmd} in loop_state: #{inspect loop_state}"
           send_error(server_state)
@@ -766,6 +765,10 @@ defmodule MemcachedE.Server do
     Bd.send_data(server_state, <<"TOUCHED\r\n">>)
   end
 
+  defp send_ascii_reply :ok, server_state do
+    Bd.send_data(server_state, <<"OK\r\n">>)
+  end
+
   defp send_ascii_reply {value, _cas}, server_state do
     Bd.send_data(server_state, <<"#{value}\r\n">>)
   end
@@ -782,66 +785,71 @@ defmodule MemcachedE.Server do
     Bd.send_data(server_state, <<"CLIENT_ERROR bad command line format.  Usage: delete <key> [noreply]\r\n">>)
   end
 
+  defp send_ascii_reply :flush_disabled, server_state do
+    Bd.send_data(server_state, <<"CLIENT_ERROR flush_all not allowed\r\n">>)
+  end
+
   defp send_ascii_reply _, server_state do
     send_error(server_state)
   end
 
   defp set_cmd(loop_state = LoopState[no_reply: nil], value, server_state) do
-    # Lager.info "set_cmd: #{inspect loop_state}"
-    send_ascii_reply(MemcachedE.set(loop_state.key, value, loop_state.flags, loop_state.exptime, 0), server_state)
+    send_ascii_reply(ExMemcached.set(loop_state.key, value, loop_state.flags, loop_state.exptime, 0), server_state)
   end
 
   defp set_cmd(loop_state, value, _server_state) do
-    # Lager.info "set_cmd: #{inspect loop_state} nr"
-    MemcachedE.set(loop_state.key, value, loop_state.flags, loop_state.exptime, 0)
+    ExMemcached.set(loop_state.key, value, loop_state.flags, loop_state.exptime, 0)
   end
 
   defp add_cmd(loop_state = LoopState[no_reply: nil], value, server_state) do
-    send_ascii_reply(MemcachedE.add(loop_state.key, value, loop_state.flags, loop_state.exptime), server_state)
+    send_ascii_reply(ExMemcached.add(loop_state.key, value, loop_state.flags, loop_state.exptime), server_state)
   end
 
   defp add_cmd(loop_state, value, _server_state) do
-    MemcachedE.add(loop_state.key, value, loop_state.flags, loop_state.exptime)
+    ExMemcached.add(loop_state.key, value, loop_state.flags, loop_state.exptime)
   end
 
   defp replace_cmd(loop_state = LoopState[no_reply: nil], value, server_state) do
-    send_ascii_reply(MemcachedE.replace(loop_state.key, value, loop_state.flags, loop_state.exptime), server_state)
+    send_ascii_reply(ExMemcached.replace(loop_state.key, value, loop_state.flags, loop_state.exptime), server_state)
   end
 
   defp replace_cmd(loop_state, value, _server_state) do
-    MemcachedE.replace(loop_state.key, value, loop_state.flags, loop_state.exptime)
+    ExMemcached.replace(loop_state.key, value, loop_state.flags, loop_state.exptime)
   end
 
   defp append_cmd(loop_state = LoopState[no_reply: nil], value, server_state) do
-    send_ascii_reply(MemcachedE.append(loop_state.key, value, loop_state.flags, loop_state.exptime), server_state)
+    send_ascii_reply(ExMemcached.append(loop_state.key, value, loop_state.flags, loop_state.exptime), server_state)
   end
 
   defp append_cmd(loop_state, value, _server_state) do
-    MemcachedE.append(loop_state.key, value, loop_state.flags, loop_state.exptime)
+    ExMemcached.append(loop_state.key, value, loop_state.flags, loop_state.exptime)
   end
 
   defp prepend_cmd(loop_state = LoopState[no_reply: nil], value, server_state) do
-    send_ascii_reply(MemcachedE.prepend(loop_state.key, value, loop_state.flags, loop_state.exptime), server_state)
+    send_ascii_reply(ExMemcached.prepend(loop_state.key, value, loop_state.flags, loop_state.exptime), server_state)
   end
 
   defp prepend_cmd(loop_state, value, _server_state) do
-    MemcachedE.prepend(loop_state.key, value, loop_state.flags, loop_state.exptime)
+    ExMemcached.prepend(loop_state.key, value, loop_state.flags, loop_state.exptime)
   end
 
   defp cas_cmd(loop_state = LoopState[no_reply: nil], value, server_state) do
-    # Lager.info "cas_cmd: #{inspect loop_state} #{value}"
-    send_ascii_reply(MemcachedE.set(loop_state.key, value, loop_state.flags, loop_state.exptime, loop_state.cas), server_state)
+    case loop_state.cas do
+      # this is a special case a REAL cas wll neve be 0. This means someone sent an invalid cas. Since
+      # we use the same backend as the biary commands a zero means don't check cas so send a -1 instead
+      0 -> send_ascii_reply(ExMemcached.set(loop_state.key, value, loop_state.flags, loop_state.exptime, -1), server_state)
+      _ -> send_ascii_reply(ExMemcached.set(loop_state.key, value, loop_state.flags, loop_state.exptime, loop_state.cas), server_state)
+    end
   end
 
   defp cas_cmd(loop_state, value, _server_state) do
-    # Lager.info "cas_cmd: #{inspect loop_state} nr"
-    MemcachedE.set(loop_state.key, value, loop_state.flags, loop_state.exptime, loop_state.cas)
+    ExMemcached.set(loop_state.key, value, loop_state.flags, loop_state.exptime, loop_state.cas)
   end
 
   defp get_cmd([key|tail], server_state) do
     cond do
       size(key) < 250 ->
-        buffer = case MemcachedE.get key do
+        buffer = case ExMemcached.get key do
           :not_found ->
             << >>
           {value, flags, _cas} ->
@@ -857,7 +865,7 @@ defmodule MemcachedE.Server do
   defp get_cmd([key|tail], buffer, server_state) do
     cond do
       size(key) <= 250 ->
-        buffer = case MemcachedE.get key do
+        buffer = case ExMemcached.get key do
           :not_found ->
             buffer # skip unfound values
           {value, flags, _cas} ->
@@ -871,13 +879,11 @@ defmodule MemcachedE.Server do
   end
 
   defp get_cmd([], buffer, server_state) do
-    # Lager.info "get_cmd: []"
     Bd.send_data(server_state, buffer <> <<"END\r\n">>)
   end
 
   defp gets_cmd([key|tail], server_state) do
-    # Lager.info "gets_cmd: #{key}"
-    buffer = case MemcachedE.get key do
+    buffer = case ExMemcached.get key do
       :not_found ->
         << >> # skip unfound values
       {value, flags, cas} ->
@@ -888,8 +894,7 @@ defmodule MemcachedE.Server do
   end
 
   defp gets_cmd([key|tail], buffer, server_state) do
-    # Lager.info "gets_cmd: #{key}"
-    buffer = case MemcachedE.get key do
+    buffer = case ExMemcached.get key do
       :not_found ->
         buffer # skip unfound values
       {value, flags, cas} ->
@@ -900,94 +905,101 @@ defmodule MemcachedE.Server do
   end
 
   defp gets_cmd([], buffer, server_state) do
-    # Lager.info "gets_cmd: [] #{inspect buffer}"
     Bd.send_data(server_state, buffer <> <<"END\r\n">>)
   end
 
   defp delete_cmd([key], server_state) do
-    send_ascii_reply(MemcachedE.delete(key), server_state)
+    send_ascii_reply(ExMemcached.delete(key), server_state)
   end
 
   defp delete_cmd([key, <<"noreply">>], _server_state) do
-    MemcachedE.delete(key)
+    ExMemcached.delete(key)
   end
 
   defp delete_cmd([key, <<"0">>], server_state) do
-    send_ascii_reply(MemcachedE.delete(key), server_state)
+    send_ascii_reply(ExMemcached.delete(key), server_state)
   end
 
   defp delete_cmd([key, <<"0">>, <<"noreply">>], _server_state) do
-    MemcachedE.delete(key)
+    ExMemcached.delete(key)
   end
 
-  defp delete_cmd([key, _], server_state) do
+  defp delete_cmd([_key, _], server_state) do
     send_ascii_reply :bad_delete_command_line, server_state
   end
 
-  defp delete_cmd([key, _, <<"noreply">>], server_state) do
+  defp delete_cmd([_key, _, <<"noreply">>], _server_state) do
   end
 
   defp touch_cmd([key, exiration], server_state) do
-    send_ascii_reply(MemcachedE.touch(key, exiration), server_state)
+    send_ascii_reply(ExMemcached.touch(key, exiration), server_state)
   end
 
   defp touch_cmd([key, exiration, _], _server_state) do
-    MemcachedE.touch(key, exiration)
+    ExMemcached.touch(key, exiration)
+  end
+
+  defp flush_all_cmd([], server_state) do
+    case Application.get_env(:ex_memcached, :disable_flush_all) do
+      true -> send_ascii_reply :flush_disabled, server_state
+      false -> send_ascii_reply(ExMemcached.flush(0), server_state)
+    end
+  end
+
+  defp flush_all_cmd([exiration], server_state) do
+    case Application.get_env(:ex_memcached, :disable_flush_all) do
+      true -> send_ascii_reply :flush_disabled, server_state
+      false -> send_ascii_reply(ExMemcached.flush(exiration), server_state)
+    end
   end
 
   defp incr_cmd([key], server_state) do
-    send_ascii_reply(MemcachedE.incr(key, 1, 0, 0xffffffff), server_state)
+    send_ascii_reply(ExMemcached.incr(key, 1, 0, 0xffffffff), server_state)
   end
 
   defp incr_cmd([key, count], server_state) do
-    send_ascii_reply(MemcachedE.incr(key, binary_to_integer(count), 0, 0xffffffff), server_state)
+    send_ascii_reply(ExMemcached.incr(key, binary_to_integer(count), 0, 0xffffffff), server_state)
   end
 
   defp incr_cmd([key, count, _], _server_state) do
-    MemcachedE.incr(key, binary_to_integer(count))
+    ExMemcached.incr(key, binary_to_integer(count))
   end
 
   defp decr_cmd([key], server_state) do
-    send_ascii_reply(MemcachedE.decr(key, 1, 0, 0xffffffff), server_state)
+    send_ascii_reply(ExMemcached.decr(key, 1, 0, 0xffffffff), server_state)
   end
 
   defp decr_cmd([key, count], server_state) do
-    send_ascii_reply(MemcachedE.decr(key, binary_to_integer(count), 0, 0xffffffff), server_state)
+    send_ascii_reply(ExMemcached.decr(key, binary_to_integer(count), 0, 0xffffffff), server_state)
   end
 
   defp decr_cmd([key, count, _], _server_state) do
-    MemcachedE.incr(key, binary_to_integer(count))
+    ExMemcached.incr(key, binary_to_integer(count))
   end
 
   defp stats_cmd(["stats", "cachedump", "1", "0", "0"], server_state) do
-    # Lager.info "stats for cachedump 1 0 0"
     Bd.send_data(server_state, <<"END\r\n">>)
   end
 
   defp stats_cmd(["stats", "cachedump", "200", "0", "0"], server_state) do
-    # Lager.info "stats for cachedump 200 0 0"
     Bd.send_data(server_state, <<"CLIENT_ERROR\r\n">>)
   end
 
   defp stats_cmd(["stats", "slabs"], server_state) do
-    # Lager.info "stats for slabs"
     Bd.send_data(server_state, <<"STAT total_malloced 4294967328\r\n">>)
     Bd.send_data(server_state, <<"STAT active_slabs 0\r\n">>)
     Bd.send_data(server_state, <<"END\r\n">>)
   end
 
-  defp stats_cmd(["stats", value], server_state) do
-    Lager.info "stats for #{value}"
+  defp stats_cmd(["stats", _value], server_state) do
     Bd.send_data(server_state, <<"END\r\n">>)
   end
 
-  defp stats_cmd(["stats", value, parameter], server_state) do
-    Lager.info "stats for #{value} #{parameter}"
+  defp stats_cmd(["stats", _value, _parameter], server_state) do
     Bd.send_data(server_state, <<"END\r\n">>)
   end
 
   defp stats_cmd(["stats"], server_state) do
-    # Lager.info "all stats"
     Bd.send_data(server_state, <<"STAT pointer_size 64\r\n">>)
     Bd.send_data(server_state, <<"STAT limit_maxbytes 4297064448\r\n">>)
     Bd.send_data(server_state, <<"END\r\n">>)
@@ -995,7 +1007,6 @@ defmodule MemcachedE.Server do
 
   def read_remainder_ascii(server_state, data, expected) do
     len = size(data)
-    # Lager.info "read_remainder_ascii: #{expected} - #{len}"
     cond do
       len == expected -> data
       len == expected + 1 -> { String.slice(data, 0..-2), <<"\r">> }

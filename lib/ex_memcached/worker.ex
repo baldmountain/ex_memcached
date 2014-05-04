@@ -1,4 +1,4 @@
-defmodule MemcachedE.Worker do
+defmodule ExMemcached.Worker do
   use GenServer
   require Lager
 
@@ -14,12 +14,10 @@ defmodule MemcachedE.Worker do
   def handle_call({:get, key} , _from, {data, current_cas}) do
     case Dict.get(data, key) do
       nil ->
-        # Lager.info "item not found for key #{key}"
         { :reply, :not_found, {data, current_cas} }
       {value, timestamp, flags, exptime, cas} ->
         case check_expiration(value, timestamp, exptime) do
           nil ->
-            # Lager.info "item expired for key #{key}"
             { :reply, :not_found, {HashDict.delete(data, key), current_cas} }
           value ->
             { :reply, {value, flags, cas}, {data, current_cas} }
@@ -28,7 +26,6 @@ defmodule MemcachedE.Worker do
   end
 
   def handle_call({:set, key, value, flags, exptime, cas}, _from, {data, current_cas}) do
-    # Lager.info "set - key: #{key} len: #{size(value)} #{cas}"
     case cas do
       0 ->
         data = Dict.put(data, key, {value, generate_expire_time(exptime), flags, exptime, current_cas})
@@ -47,7 +44,6 @@ defmodule MemcachedE.Worker do
   end
 
   def handle_call({:add, key, value, flags, expirary}, _from, {data, current_cas}) do
-    # Lager.info "add - key: #{key} len: #{size(value)}"
     case Dict.get(data, key) do
       nil ->
         data = Dict.put(data, key, {value, generate_expire_time(expirary), flags, expirary, current_cas})
@@ -66,11 +62,11 @@ defmodule MemcachedE.Worker do
   def handle_call({:replace, key, value, flags, expirary}, _from, {data, current_cas}) do
     case Dict.get(data, key) do
       nil ->
-        { :reply, :not_found, {data, current_cas} }
+        { :reply, :not_stored, {data, current_cas} }
       {old_value, timestamp, _, exptime, _} ->
         case check_expiration(old_value, timestamp, exptime) do
           nil ->
-            { :reply, :not_found, {data, current_cas} }
+            { :reply, :not_stored, {data, current_cas} }
           _ ->
             data = Dict.put(data, key, {value, generate_expire_time(expirary), flags, expirary, current_cas})
             { :reply, {:stored, current_cas}, {data, current_cas + 1} }
@@ -115,7 +111,6 @@ defmodule MemcachedE.Worker do
       {value, timestamp, _, exptime, _} ->
         case check_expiration(value, timestamp, exptime) do
           nil ->
-            # Lager.info "item expired for key #{key}"
             { :reply, :not_found, {HashDict.delete(data, key), current_cas} }
           _value ->
             data = Dict.delete(data, key)
@@ -131,7 +126,6 @@ defmodule MemcachedE.Worker do
       {value, timestamp, flags, exptime, _} ->
         case check_expiration(value, timestamp, exptime) do
           nil ->
-            # Lager.info "item expired for key #{key}"
             { :reply, :not_found, {HashDict.delete(data, key), current_cas} }
           _value ->
             data = Dict.put(data, key, {value, generate_expire_time(expiration), flags, expiration, current_cas})
@@ -145,12 +139,10 @@ defmodule MemcachedE.Worker do
   def handle_call({:gat, key, expiration} , _from, {data, current_cas}) do
     case Dict.get(data, key) do
       nil ->
-        # Lager.info "item not found for key #{key}"
         { :reply, :not_found, {data, current_cas} }
       {value, timestamp, flags, exptime, cas} ->
         case check_expiration(value, timestamp, exptime) do
           nil ->
-            # Lager.info "item expired for key #{key}"
             { :reply, :not_found, {HashDict.delete(data, key), current_cas} }
           value ->
             data = Dict.put(data, key, {value, generate_expire_time(expiration), flags, expiration, current_cas})
@@ -164,7 +156,6 @@ defmodule MemcachedE.Worker do
       {value, timestamp, flags, exptime, _} ->
         case check_expiration(value, timestamp, exptime) do
           nil when expiration == 0xffffffff ->
-            # Lager.info "item expired for key #{key}"
             { :reply, :not_found, {HashDict.delete(data, key), current_cas} }
           nil ->
             data = Dict.put(data, key, {intial, generate_expire_time(expiration), 0, expiration, current_cas})
@@ -200,7 +191,6 @@ defmodule MemcachedE.Worker do
       {value, timestamp, flags, exptime, _} ->
         case check_expiration(value, timestamp, exptime) do
           nil when expiration == 0xffffffff ->
-            # Lager.info "item expired for key #{key}"
             { :reply, :not_found, {HashDict.delete(data, key), current_cas} }
           nil ->
             data = Dict.put(data, key, {intial, generate_expire_time(expiration), 0, expiration, current_cas})
@@ -232,13 +222,28 @@ defmodule MemcachedE.Worker do
   end
 
   def handle_call({:flush, expiration}, _from, {data, current_cas}) do
+    expiration = cond do
+      is_binary(expiration) -> binary_to_integer expiration
+      true -> expiration
+    end
     case expiration do
       0 -> { :reply, :ok, {HashDict.new, current_cas} }
       _ ->
-        :timer.apply_after(expiration*1000, MemcachedE, :flush, [0])
+        data = Dict.keys(data)
+          |> Enum.reduce data, fn(key, data) ->
+            case Dict.get(data, key) do
+              {value, timestamp, flags, exptime, cas} ->
+                case check_expiration(value, timestamp, exptime) do
+                  nil ->
+                    data
+                  _ ->
+                    Dict.put(data, key, {value, generate_expire_time(expiration), flags, expiration, cas})
+                end
+              _ -> data
+            end
+          end
         { :reply, :ok, {data, current_cas} }
     end
-
   end
 
   defp generate_expire_time(exptime) do

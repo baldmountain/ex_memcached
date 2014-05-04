@@ -1,4 +1,4 @@
-defmodule MemcachedE do
+defmodule ExMemcached do
   use Application
   require Lager
 
@@ -6,12 +6,12 @@ defmodule MemcachedE do
   # for more information on OTP Applications
   def start(_type, []) do
     import Supervisor.Spec
-    port = Application.get_env(:memcached_e, :listen_port)
+    port = Application.get_env(:ex_memcached, :listen_port)
     Lager.info "listening on port: #{port}"
-    {:ok, _} = :ranch.start_listener(:tcp_server, 1, :ranch_tcp, [{:port, port}], MemcachedE.Server, [])
+    {:ok, _} = :ranch.start_listener(:tcp_server, 1, :ranch_tcp, [{:port, port}], ExMemcached.Server, [])
 
     children = [
-      worker(MemcachedE.Supervisor, [])
+      worker(ExMemcached.Supervisor, [])
     ]
 
     Supervisor.start_link(children, strategy: :one_for_one)

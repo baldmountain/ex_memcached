@@ -1,6 +1,6 @@
-defmodule MemcachedE.BinaryCommands do
-  require MemcachedE.BaseDefinitions
-  alias MemcachedE.BaseDefinitions, as: Bd
+defmodule ExMemcached.BinaryCommands do
+  require ExMemcached.BaseDefinitions
+  alias ExMemcached.BaseDefinitions, as: Bd
   require Lager
 
   defp make_response_header(opcode, keylen, extlen, datatype, status, bodylen, opaque, cas \\ 0) do
@@ -76,7 +76,7 @@ defmodule MemcachedE.BinaryCommands do
 
   def binary_set_cmd(key, value, flags, exptime, opcode, opaque, cas, server_state) do
     # Lager.info "binary_set_cmd: #{key} #{inspect value} #{inspect flags} #{inspect exptime} 0x#{integer_to_binary(opaque, 16)} #{cas}"
-    case MemcachedE.set(key, value, flags, exptime, cas) do
+    case ExMemcached.set(key, value, flags, exptime, cas) do
       {:stored, current_cas} -> send_response_header(server_state, opcode, 0, 0, 0, Bd.protocol_binray_response_success, 0, opaque, current_cas)
       :not_found -> send_error(server_state, opcode, opaque, Bd.protocol_binray_response_key_enoent)
       :exists -> send_error(server_state, opcode, opaque, Bd.protocol_binray_response_key_eexists)
@@ -86,7 +86,7 @@ defmodule MemcachedE.BinaryCommands do
 
   def binary_add_cmd(key, value, flags, exptime, opcode, opaque, server_state) do
     # Lager.info "binary_add_cmd: #{key} #{inspect value} 0x#{integer_to_binary(opaque, 16)}"
-    case MemcachedE.add(key, value, flags, exptime) do
+    case ExMemcached.add(key, value, flags, exptime) do
       {:stored, current_cas} -> send_response_header(server_state, opcode, 0, 0, 0, Bd.protocol_binray_response_success, 0, opaque, current_cas)
       :not_stored -> send_error(server_state, opcode, opaque, Bd.protocol_binray_response_key_eexists)
     end
@@ -94,7 +94,7 @@ defmodule MemcachedE.BinaryCommands do
 
   def binary_addq_cmd(key, value, flags, exptime, opcode, opaque, server_state) do
     # Lager.info "binary_addq_cmd: #{key} #{inspect value} 0x#{integer_to_binary(opaque, 16)}"
-    case MemcachedE.add(key, value, flags, exptime) do
+    case ExMemcached.add(key, value, flags, exptime) do
       :exists -> send_error(server_state, opcode, opaque, Bd.protocol_binray_response_key_eexists)
       _ -> server_state
     end
@@ -102,15 +102,15 @@ defmodule MemcachedE.BinaryCommands do
 
   def binary_replace_cmd(key, value, flags, exptime, opcode, opaque, server_state) do
     # Lager.info "binary_replace_cmd: #{key} #{inspect value} 0x#{integer_to_binary(opaque, 16)}"
-    case MemcachedE.replace(key, value, flags, exptime) do
+    case ExMemcached.replace(key, value, flags, exptime) do
       {:stored, current_cas} -> send_response_header(server_state, opcode, 0, 0, 0, Bd.protocol_binray_response_success, 0, opaque, current_cas)
-      :not_found -> send_error(server_state, opcode, opaque, Bd.protocol_binray_response_key_enoent)
+      :not_stored -> send_error(server_state, opcode, opaque, Bd.protocol_binray_response_key_enoent)
     end
   end
 
   def binary_replaceq_cmd(key, value, flags, exptime, opcode, opaque, server_state) do
     # Lager.info "binary_replaceq_cmd: #{key} #{inspect value} 0x#{integer_to_binary(opaque, 16)}"
-    case MemcachedE.replace(key, value, flags, exptime) do
+    case ExMemcached.replace(key, value, flags, exptime) do
       :not_found -> send_error(server_state, opcode, opaque, Bd.protocol_binray_response_key_enoent)
       _ -> server_state
     end
@@ -118,7 +118,7 @@ defmodule MemcachedE.BinaryCommands do
 
   def binary_delete_cmd(key, opcode, opaque, server_state) do
     # Lager.info "binary_delete_cmd: #{key} 0x#{integer_to_binary(opaque, 16)}"
-    case MemcachedE.delete(key) do
+    case ExMemcached.delete(key) do
       :deleted -> send_response_header(server_state, opcode, 0, 0, 0, Bd.protocol_binray_response_success, 0, opaque)
       :not_found -> send_error(server_state, opcode, opaque, Bd.protocol_binray_response_key_enoent)
     end
@@ -126,7 +126,7 @@ defmodule MemcachedE.BinaryCommands do
 
   def binary_deleteq_cmd(key, opcode, opaque, server_state) do
     # Lager.info "binary_deleteq_cmd: #{key} 0x#{integer_to_binary(opaque, 16)}"
-    case MemcachedE.delete(key) do
+    case ExMemcached.delete(key) do
       :not_found -> send_error(server_state, opcode, opaque, Bd.protocol_binray_response_key_enoent)
       _ -> server_state
     end
@@ -134,7 +134,7 @@ defmodule MemcachedE.BinaryCommands do
 
   def binary_get_cmd(key, opcode, opaque, server_state) do
     # Lager.info "binary_get_cmd: #{key} 0x#{integer_to_binary(opaque, 16)}"
-    case MemcachedE.get(key) do
+    case ExMemcached.get(key) do
       {value, flags, cas} when is_integer(value) ->
         send_response_header(server_state, opcode, 0, 4, 0, Bd.protocol_binray_response_success, 12, opaque, cas)
         Bd.send_data(server_state, << flags::size(32), value::size(64) >>)
@@ -154,7 +154,7 @@ defmodule MemcachedE.BinaryCommands do
 
   def binary_getk_cmd(key, opcode, opaque, server_state) do
     # Lager.info "binary_getk_cmd: #{key} 0x#{integer_to_binary(opaque, 16)}"
-    case MemcachedE.get(key) do
+    case ExMemcached.get(key) do
       {value, flags, cas} when is_integer(value) ->
         keylen = size(key)
         send_response_header(server_state, opcode, 0, 4, 0, Bd.protocol_binray_response_success, 12 + keylen, opaque, cas)
@@ -176,7 +176,7 @@ defmodule MemcachedE.BinaryCommands do
 
   def binary_getq_cmd(key, opcode, opaque, server_state) do
     # Lager.info "binary_getq_cmd: #{key} 0x#{integer_to_binary(opaque, 16)}"
-    case MemcachedE.get(key) do
+    case ExMemcached.get(key) do
       {value, flags, cas} when is_integer(value) ->
         response = make_response_header(opcode, 0, 4, 0, Bd.protocol_binray_response_success, 12, opaque, cas)
           <> << flags::size(32), value::size(64) >>
@@ -199,7 +199,7 @@ defmodule MemcachedE.BinaryCommands do
 
   def binary_getkq_cmd(key, opcode, opaque, server_state) do
     # Lager.info "binary_getkq_cmd: #{key} 0x#{integer_to_binary(opaque, 16)}"
-    case MemcachedE.get(key) do
+    case ExMemcached.get(key) do
       {value, flags, cas} when is_integer(value) ->
         keylen = size(key)
         response = make_response_header(opcode, keylen, 4, 0, Bd.protocol_binray_response_success, 12 + keylen, opaque, cas)
@@ -225,7 +225,7 @@ defmodule MemcachedE.BinaryCommands do
 
   def binary_gat_cmd(key, expirary, opcode, opaque, server_state) do
     # Lager.info "binary_gat_cmd: #{expirary} #{key} 0x#{integer_to_binary(opaque, 16)}"
-    case MemcachedE.gat(key, expirary) do
+    case ExMemcached.gat(key, expirary) do
       {value, flags, cas} when is_integer(value) ->
         send_response_header(server_state, opcode, 0, 4, 0, Bd.protocol_binray_response_success, 12, opaque, cas)
         Bd.send_data(server_state, << flags::size(32), value::size(64) >>)
@@ -245,7 +245,7 @@ defmodule MemcachedE.BinaryCommands do
 
   def binary_incr_cmd(key, count, intial, expiration, opcode, opaque, server_state) do
     # Lager.info "binary_incr_cmd: #{key} #{inspect count} 0x#{integer_to_binary(opaque, 16)}"
-    case MemcachedE.incr(key, count, intial, expiration) do
+    case ExMemcached.incr(key, count, intial, expiration) do
       :not_found -> send_error(server_state, opcode, opaque, Bd.protocol_binray_response_key_enoent)
       :invalid_incr_decr -> send_error(server_state, opcode, opaque, Bd.protocol_binray_response_delta_badval)
       {value, cas} ->
@@ -257,7 +257,7 @@ defmodule MemcachedE.BinaryCommands do
 
   def binary_incrq_cmd(key, count, intial, expiration, opcode, opaque, server_state) do
     # Lager.info "binary_incrq_cmd: #{key} #{inspect count}"
-    case MemcachedE.incr(key, count, intial, expiration) do
+    case ExMemcached.incr(key, count, intial, expiration) do
       :not_found ->
         response = make_response_header(opcode, 0, 0, 0, Bd.protocol_binray_response_key_enoent, 0, opaque)
         server_state.stored_responses(server_state.stored_responses <> response)
@@ -267,7 +267,7 @@ defmodule MemcachedE.BinaryCommands do
 
   def binary_decr_cmd(key, count, intial, expiration, opcode, opaque, server_state) do
     # Lager.info "binary_decr_cmd: #{key} #{inspect count} 0x#{integer_to_binary(opaque, 16)}"
-    case MemcachedE.decr(key, count, intial, expiration) do
+    case ExMemcached.decr(key, count, intial, expiration) do
       :not_found -> send_error(server_state, opcode, opaque, Bd.protocol_binray_response_key_enoent)
       :invalid_incr_decr -> send_error(server_state, opcode, opaque, Bd.protocol_binray_response_delta_badval)
       {value, cas} ->
@@ -279,7 +279,7 @@ defmodule MemcachedE.BinaryCommands do
 
   def binary_decrq_cmd(key, count, intial, expiration, opcode, opaque, server_state) do
     # Lager.info "binary_decrq_cmd: #{key} #{inspect count}"
-    case MemcachedE.decr(key, count, intial, expiration) do
+    case ExMemcached.decr(key, count, intial, expiration) do
       :not_found ->
         response = make_response_header(opcode, 0, 0, 0, Bd.protocol_binray_response_key_enoent, 0, opaque)
         server_state.stored_responses(server_state.stored_responses <> response)
@@ -290,7 +290,7 @@ defmodule MemcachedE.BinaryCommands do
 
   def binary_version_cmd(opcode, opaque, server_state) do
     # Lager.info "binary_version_cmd: 0x#{integer_to_binary(opaque, 16)}"
-    {:ok, state} = :application.get_all_key :memcached_e
+    {:ok, state} = :application.get_all_key :ex_memcached
     data = <<"#{state[:vsn]}">>
     send_response_header(server_state, opcode, 0, 0, 0, Bd.protocol_binray_response_success, size(data), opaque)
     Bd.send_data(server_state, data)
@@ -299,19 +299,19 @@ defmodule MemcachedE.BinaryCommands do
 
   def binary_flush_cmd(expiration, opcode, opaque, server_state) do
     # Lager.info "binary_flush_cmd: 0x#{integer_to_binary(opaque, 16)}"
-    :ok = MemcachedE.flush expiration
+    :ok = ExMemcached.flush expiration
     send_response_header(server_state, opcode, 0, 0, 0, Bd.protocol_binray_response_success, 0, opaque)
   end
 
   def binary_flushq_cmd(expiration, _opcode, _opaque, server_state) do
     # Lager.info "binary_flushq_cmd:"
-    :ok = MemcachedE.flush expiration
+    :ok = ExMemcached.flush expiration
     server_state
   end
 
   def binary_append_cmd(key, value, opcode, opaque, server_state) do
     # Lager.info "binary_append_cmd: #{key} #{inspect value} 0x#{integer_to_binary(opaque, 16)}"
-    case MemcachedE.append(key, value, 0, 0) do
+    case ExMemcached.append(key, value, 0, 0) do
       {:stored, current_cas} -> send_response_header(server_state, opcode, 0, 0, 0, Bd.protocol_binray_response_success, 0, opaque, current_cas)
       _ -> send_error(server_state, opcode, opaque, Bd.protocol_binray_response_not_stored)
     end
@@ -320,7 +320,7 @@ defmodule MemcachedE.BinaryCommands do
 
   def binary_appendq_cmd(key, value, opcode, opaque, server_state) do
     # Lager.info "binary_appendq_cmd: #{key} #{inspect value} 0x#{integer_to_binary(opaque, 16)}"
-    case MemcachedE.append(key, value, 0, 0) do
+    case ExMemcached.append(key, value, 0, 0) do
       {:stored, _current_cas} -> server_state
       _ ->
         send_response_header(server_state, opcode, 0, 0, 0, Bd.protocol_binray_response_not_stored, 0, opaque)
@@ -329,7 +329,7 @@ defmodule MemcachedE.BinaryCommands do
 
   def binary_prepend_cmd(key, value, opcode, opaque, server_state) do
     # Lager.info "binary_prepend_cmd: #{key} #{inspect value} 0x#{integer_to_binary(opaque, 16)}"
-    case MemcachedE.prepend(key, value, 0, 0) do
+    case ExMemcached.prepend(key, value, 0, 0) do
       {:stored, current_cas} -> send_response_header(server_state, opcode, 0, 0, 0, Bd.protocol_binray_response_success, 0, opaque, current_cas)
       _ -> send_response_header(server_state, opcode, 0, 0, 0, Bd.protocol_binray_response_not_stored, 0, opaque)
     end
@@ -337,7 +337,7 @@ defmodule MemcachedE.BinaryCommands do
 
   def binary_prependq_cmd(key, value, opcode, opaque, server_state) do
     # Lager.info "binary_prependq_cmd: #{key} #{inspect value} 0x#{integer_to_binary(opaque, 16)}"
-    case MemcachedE.prepend(key, value, 0, 0) do
+    case ExMemcached.prepend(key, value, 0, 0) do
       {:stored, _current_cas} -> server_state
       _ ->
         send_response_header(server_state, opcode, 0, 0, 0, Bd.protocol_binray_response_not_stored, 0, opaque)
@@ -346,23 +346,9 @@ defmodule MemcachedE.BinaryCommands do
 
   def binary_touch_cmd(key, exptime, opcode, opaque, server_state) do
     # Lager.info "binary_touch_cmd: #{key} #{exptime} 0x#{integer_to_binary(opaque, 16)}"
-    case MemcachedE.touch(key, exptime) do
+    case ExMemcached.touch(key, exptime) do
       :touched -> send_response_header(server_state, opcode, 0, 0, 0, Bd.protocol_binray_response_success, 0, opaque)
       :not_found -> send_error(server_state, opcode, opaque, Bd.protocol_binray_response_key_enoent)
     end
   end
-
-  defp bytes_for_int i do
-    cond do
-      i < 16 -> 1
-      i < 256 -> 2
-      i < 4096 -> 3
-      i < 65536 -> 4
-      i < 1048576 -> 5
-      i < 16777216 -> 6
-      i < 268435456 -> 7
-      true -> 8
-    end
-  end
-
 end

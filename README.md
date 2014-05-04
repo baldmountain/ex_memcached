@@ -1,3 +1,3 @@
-# MemcachedE
+# ExMemcached
 
 ** TODO: Add description **

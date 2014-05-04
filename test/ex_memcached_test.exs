@@ -1,7 +1,7 @@
-defmodule MemcachedETest do
+defmodule ExMemcachedTest do
   use ExUnit.Case
-  require MemcachedE.BaseDefinitions
-  alias MemcachedE.BaseDefinitions, as: Bd
+  require ExMemcached.BaseDefinitions
+  alias ExMemcached.BaseDefinitions, as: Bd
   require Lager
 
   setup_all do
@@ -35,7 +35,7 @@ defmodule MemcachedETest do
     :ok = :gen_tcp.send(socket, <<Bd.protocol_binary_req, Bd.protocol_binray_cmd_set, size(key)::size(16), 8, 0, 0::size(16), body_len::size(32),
       0::size(32), cas::size(64), flags::size(32), expiry::size(32) >> <> key <> value)
     {:ok, response} = :gen_tcp.recv(socket, 0)
-    << Bd.protocol_binary_res, Bd.protocol_binray_cmd_set, 0::size(16), 0, 0, status::size(16), 0::size(32), 0::size(32), cas::size(64) >> = response
+    << Bd.protocol_binary_res, Bd.protocol_binray_cmd_set, 0::size(16), 0, 0, status::size(16), _body_len::size(32), 0::size(32), cas::size(64), _tail::binary >> = response
     {status, cas}
   end
 
@@ -44,7 +44,7 @@ defmodule MemcachedETest do
     :ok = :gen_tcp.send(socket, <<Bd.protocol_binary_req, Bd.protocol_binray_cmd_add, size(key)::size(16), 8, 0, 0::size(16), body_len::size(32),
       0::size(32), 0::size(64), flags::size(32), expiry::size(32) >> <> key <> value)
     {:ok, response} = :gen_tcp.recv(socket, 0)
-    << Bd.protocol_binary_res, Bd.protocol_binray_cmd_add, 0::size(16), 0, 0, status::size(16), 0::size(32), 0::size(32), cas::size(64) >> = response
+    << Bd.protocol_binary_res, Bd.protocol_binray_cmd_add, 0::size(16), 0, 0, status::size(16), _body_len::size(32), 0::size(32), cas::size(64), _tail::binary >> = response
     {status, cas}
   end
 
@@ -53,7 +53,7 @@ defmodule MemcachedETest do
     :ok = :gen_tcp.send(socket, <<Bd.protocol_binary_req, Bd.protocol_binray_cmd_replace, size(key)::size(16), 8, 0, 0::size(16), body_len::size(32),
       0::size(32), 0::size(64), flags::size(32), expiry::size(32) >> <> key <> value)
     {:ok, response} = :gen_tcp.recv(socket, 0)
-    << Bd.protocol_binary_res, Bd.protocol_binray_cmd_replace, 0::size(16), 0, 0, status::size(16), 0::size(32), 0::size(32), _::size(64) >> = response
+    << Bd.protocol_binary_res, Bd.protocol_binray_cmd_replace, 0::size(16), 0, 0, status::size(16), _body_len::size(32), 0::size(32), _::size(64), _tail::binary >> = response
     status
   end
 
@@ -121,7 +121,7 @@ defmodule MemcachedETest do
     :ok = :gen_tcp.send(socket, <<Bd.protocol_binary_req, Bd.protocol_binray_cmd_get, body_len::size(16), 0, 0, 0::size(16), body_len::size(32),
       0::size(32), 0::size(64) >> <> key)
     {:ok, response} = :gen_tcp.recv(socket, 0)
-    << Bd.protocol_binary_res, Bd.protocol_binray_cmd_get, 0::size(16), 0, 0, status::size(16), _body_len::size(32), 0::size(32), _cas::size(64) >> = response
+    << Bd.protocol_binary_res, Bd.protocol_binray_cmd_get, 0::size(16), 0, 0, status::size(16), _body_len::size(32), 0::size(32), _cas::size(64), _tail::binary >> = response
     status == Bd.protocol_binray_response_key_enoent
   end
 
@@ -165,6 +165,7 @@ defmodule MemcachedETest do
     case b_incr_cas key, socket, count, initial do
       {ans, cas} -> ans
       :invalid -> :invalid
+      :bad_value -> :bad_value
     end
   end
 
@@ -173,7 +174,7 @@ defmodule MemcachedETest do
     :ok = :gen_tcp.send(socket, <<Bd.protocol_binary_req, Bd.protocol_binray_cmd_increment, key_len::size(16), 20, 0, 0::size(16), 20+key_len::size(32), 0::size(32), 0::size(64),
       count::[unsigned, size(64)], initial::size(64), 0::size(32) >> <> key)
     {:ok, response} = :gen_tcp.recv(socket, 24)
-    << Bd.protocol_binary_res, Bd.protocol_binray_cmd_increment, 0::size(16), 0, 0, status::size(16), _body_len::size(32),
+    << Bd.protocol_binary_res, Bd.protocol_binray_cmd_increment, 0::size(16), 0, 0, status::size(16), body_len::size(32),
       0::size(32), cas::size(64) >> = response
     case status do
       Bd.protocol_binray_response_success ->
@@ -181,7 +182,11 @@ defmodule MemcachedETest do
         << ans::[unsigned, size(64)]>> = response
         {ans, cas}
       Bd.protocol_binray_response_einval ->
+        {:ok, response} = :gen_tcp.recv(socket, body_len)
         :invalid
+      Bd.protocol_binray_response_delta_badval ->
+        {:ok, response} = :gen_tcp.recv(socket, body_len)
+        :bad_value
     end
   end
 
@@ -312,10 +317,10 @@ defmodule MemcachedETest do
 
     # Issue 48 - incrementing plain text.
     b_set meta[:socket], "issue48", "text", 0, 0
-    assert :invalid == b_incr "issue48", meta[:socket]
+    assert :bad_value == b_incr "issue48", meta[:socket]
     {"text", 0, _} = b_get "issue48", meta[:socket]
 
-    assert :invalid == b_incr "issue48", meta[:socket]
+    assert :bad_value == b_incr "issue48", meta[:socket]
     {"text", 0, _} = b_get "issue48", meta[:socket]
 
     # Issue 320 - incr/decr wrong length for initial value
@@ -350,7 +355,7 @@ defmodule MemcachedETest do
 
     # diag "CAS";
     b_flush meta[:socket]
-    {Bd.protocol_binray_response_key_enoent, 0x7FFFFFF} = b_set meta[:socket], "x", "bad value", 15, 5, 0x7FFFFFF
+    {Bd.protocol_binray_response_key_enoent, 0} = b_set meta[:socket], "x", "bad value", 15, 5, 0x7FFFFFF
 
     {_, cas} = b_add "x", "original value", 5, 19, meta[:socket]
     {"original value", 5, ^cas} = b_get "x", meta[:socket]

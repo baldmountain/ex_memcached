@@ -1,8 +1,8 @@
-defmodule MemcachedE.Mixfile do
+defmodule ExMemcached.Mixfile do
   use Mix.Project
 
   def project do
-    [ app: :memcached_e,
+    [ app: :ex_memcached,
       version: "0.0.1",
       elixir: "~> 0.13.0",
       deps: deps,
@@ -12,10 +12,15 @@ defmodule MemcachedE.Mixfile do
   # Configuration for the OTP application
   def application do
     [
-      mod: { MemcachedE, [] },
+      mod: { ExMemcached, [] },
       applications: [:xgen, :exlager, :ranch],
       # application configuration goes here:
-      env: [listen_port: 8080, max_data_size: 1024*1024, max_connections: 1024]
+      env: [
+        listen_port: 8080,
+        max_data_size: 1024*1024,
+        max_connections: 1024,
+        disable_flush_all: false
+      ]
     ]
   end
 

@@ -1,4 +1,4 @@
-defmodule MemcachedE.BaseDefinitions do
+defmodule ExMemcached.BaseDefinitions do
   use Constants
 
   define protocol_binary_req, 0x80
