@@ -43,7 +43,7 @@ defmodule ExMemcached.Server do
   end
 
   defp handle_binary_protocol(server_state, data) do
-    # server_state = try do
+    server_state = try do
       data = read_expected server_state, data, 24
       << Bd.protocol_binary_req, opcode, keylen::[big, unsigned, integer, size(16)], extlen, _datatype, _reserved::[big, unsigned, integer, size(16)],
         bodylen::[big, unsigned, integer, size(32)], opaque::[big, unsigned, integer, size(32)], cas::[big, unsigned, integer, size(64)], tail::binary >> = data
@@ -340,30 +340,30 @@ defmodule ExMemcached.Server do
         end
       end
       server_state
-    # catch
-    #   :error, :badmatch ->
-    #     Lager.info "Badmatch on input command"
-    #     << _magic, opcode, _tail::binary >> = data
-    #     B.send_response_header(server_state, opcode, 0, 0, 0, Bd.protocol_binray_response_einval, 0, 0)
-    #   :exit, value ->
-    #     Lager.info "exit called with #{inspect value}"
-    #     server_state
-    #   :throw, value ->
-    #     Lager.info "Throw called with #{inspect value}"
-    #     server_state
-    #   what, value ->
-    #     Lager.info "1> Caught #{what} with #{inspect value}"
-    #     try do
-    #       << _magic, opcode, _keylen::[big, unsigned, integer, size(16)], _extlen, _datatype, _reserved::[big, unsigned, integer, size(16)],
-    #         _bodylen::[big, unsigned, integer, size(32)], opaque::[big, unsigned, integer, size(32)], _tail::binary >> = data
-    #       B.send_response_header(server_state, opcode, 0, 0, 0, Bd.protocol_binray_response_einval, 0, opaque)
-    #       server_state
-    #     catch
-    #       what, value ->
-    #         Lager.info "2> Caught secondary #{inspect what} with #{inspect value}"
-    #         server_state
-    #     end
-    # end
+    catch
+      :error, :badmatch ->
+        Lager.info "Badmatch on input command"
+        << _magic, opcode, _tail::binary >> = data
+        B.send_response_header(server_state, opcode, 0, 0, 0, Bd.protocol_binray_response_einval, 0, 0)
+      :exit, value ->
+        Lager.info "exit called with #{inspect value}"
+        server_state
+      :throw, value ->
+        Lager.info "Throw called with #{inspect value}"
+        server_state
+      what, value ->
+        Lager.info "1> Caught #{what} with #{inspect value}"
+        try do
+          << _magic, opcode, _keylen::[big, unsigned, integer, size(16)], _extlen, _datatype, _reserved::[big, unsigned, integer, size(16)],
+            _bodylen::[big, unsigned, integer, size(32)], opaque::[big, unsigned, integer, size(32)], _tail::binary >> = data
+          B.send_response_header(server_state, opcode, 0, 0, 0, Bd.protocol_binray_response_einval, 0, opaque)
+          server_state
+        catch
+          what, value ->
+            Lager.info "2> Caught secondary #{inspect what} with #{inspect value}"
+            server_state
+        end
+    end
     server_state
   end
 
