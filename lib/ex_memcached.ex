@@ -21,6 +21,7 @@ defmodule ExMemcached do
   def stop do
   end
 
+  # Wrappers around the calls to worker.ex
   def set key, value, flags, exptime, cas do
     :gen_server.call(:cache, {:set, key, value, flags, exptime, cas})
   end
