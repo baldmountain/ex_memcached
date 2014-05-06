@@ -4,6 +4,8 @@ defmodule ExMemcached.Server do
   require ExMemcached.BaseDefinitions
   alias ExMemcached.BaseDefinitions, as: Bd
   alias ExMemcached.BinaryCommands, as: B
+  alias ExMemcached.AsciiCommands, as: A
+  alias ExMemcached.AsciiCommands.LoopState, as: LoopState
   alias ExMemcached.ServerState, as: ServerState
 
   @receive_timeout 5000
@@ -367,10 +369,6 @@ defmodule ExMemcached.Server do
     server_state
   end
 
-  defmodule LoopState do
-    defstruct state: :commands, key: nil, flags: 0, exptime: 0, cas: 0, data_length: 0, no_reply: nil
-  end
-
   defp handle_ascii_protocol(server_state, data) do
     cmds = String.split data, "\r\n"
     if size(List.last(cmds)) == 0, do: cmds = List.delete_at(cmds, -1)
@@ -388,11 +386,11 @@ defmodule ExMemcached.Server do
       case {loop_state.state, command} do
         {:commands, "get"} ->
           [_|tail] = parts
-          get_cmd(tail, server_state)
+          A.get_cmd(tail, server_state)
           loop_state = %LoopState{}
         {:commands, "gets"} ->
           [_|tail] = parts
-          gets_cmd(tail, server_state)
+          A.gets_cmd(tail, server_state)
           loop_state = %LoopState{}
         {:commands, "set"} ->
           case parts do
@@ -401,7 +399,7 @@ defmodule ExMemcached.Server do
                 %LoopState{state: :set, key: k, flags: binary_to_integer(flags), exptime: binary_to_integer(exptime), data_length: binary_to_integer(data_length)}
               catch
                 :error, :badarg ->
-                  send_ascii_reply :bad_command_line, server_state
+                  A.send_ascii_reply :bad_command_line, server_state
                   %LoopState{}
                 what, value ->
                   Lager.info "3> Caught #{inspect what} with #{inspect value}"
@@ -412,20 +410,20 @@ defmodule ExMemcached.Server do
                 %LoopState{state: :set, key: k, flags: binary_to_integer(flags), exptime: binary_to_integer(exptime), data_length: binary_to_integer(data_length), no_reply: nr}
               catch
                 :error, :badarg ->
-                  send_ascii_reply :bad_command_line, server_state
+                  A.send_ascii_reply :bad_command_line, server_state
                   %LoopState{}
                 what, value ->
                   Lager.info "4> Caught #{inspect what} with #{inspect value}"
                   %LoopState{}
               end
             _ ->
-              send_error(server_state)
+              A.send_error(server_state)
               loop_state = %LoopState{}
           end
         {:set, _} when cmd_size == data_length ->
           cond do
             data_length <= Application.get_env(:ex_memcached, :max_data_size) ->
-              set_cmd(loop_state, cmd, server_state)
+              A.set_cmd(loop_state, cmd, server_state)
             true ->
               Lager.info "Object #{loop_state.key} too big for cache"
               ExMemcached.delete loop_state.key
@@ -437,7 +435,7 @@ defmodule ExMemcached.Server do
             {cmd, rest} ->
               cond do
                 data_length <= Application.get_env(:ex_memcached, :max_data_size) ->
-                  set_cmd(loop_state, cmd, server_state)
+                  A.set_cmd(loop_state, cmd, server_state)
                 true ->
                   Lager.info "Object #{loop_state.key} too big for cache"
                   ExMemcached.delete loop_state.key
@@ -465,7 +463,7 @@ defmodule ExMemcached.Server do
                 %LoopState{state: :add, key: k, flags: binary_to_integer(flags), exptime: binary_to_integer(exptime), data_length: binary_to_integer(data_length)}
               catch
                 :error, :badarg ->
-                  send_ascii_reply :bad_command_line, server_state
+                  A.send_ascii_reply :bad_command_line, server_state
                   %LoopState{}
                 what, value ->
                   Lager.info "5> Caught #{inspect what} with #{inspect value}"
@@ -476,23 +474,23 @@ defmodule ExMemcached.Server do
                 %LoopState{state: :add, key: k, flags: binary_to_integer(flags), exptime: binary_to_integer(exptime), data_length: binary_to_integer(data_length), no_reply: nr}
               catch
                 :error, :badarg ->
-                  send_ascii_reply :bad_command_line, server_state
+                  A.send_ascii_reply :bad_command_line, server_state
                   %LoopState{}
                 what, value ->
                   Lager.info "6> Caught #{inspect what} with #{inspect value}"
                   %LoopState{}
               end
             _ ->
-              send_error(server_state)
+              A.send_error(server_state)
               loop_state = %LoopState{}
           end
         {:add, _} when cmd_size == data_length ->
-          add_cmd(loop_state, cmd, server_state)
+          A.add_cmd(loop_state, cmd, server_state)
           loop_state = %LoopState{}
         {:add, _} when cmd_size < data_length ->
           case read_remainder_ascii(server_state, cmd, data_length) do
             {cmd, rest} ->
-              add_cmd(loop_state, cmd, server_state)
+              A.add_cmd(loop_state, cmd, server_state)
               loop_state = %LoopState{}
               server_state = cond do
                 size(rest) > 0 -> %ServerState{server_state | existing_data: rest}
@@ -504,7 +502,7 @@ defmodule ExMemcached.Server do
           end
         {:add, _} ->
           Lager.info "bad data length"
-          send_error(server_state)
+          A.send_error(server_state)
           loop_state = %LoopState{}
         {:commands, "replace"} ->
           case parts do
@@ -513,7 +511,7 @@ defmodule ExMemcached.Server do
                 %LoopState{state: :replace, key: k, flags: binary_to_integer(flags), exptime: binary_to_integer(exptime), data_length: binary_to_integer(data_length)}
               catch
                 :error, :badarg ->
-                  send_ascii_reply :bad_command_line, server_state
+                  A.send_ascii_reply :bad_command_line, server_state
                   %LoopState{}
                 what, value ->
                   Lager.info "7> Caught #{inspect what} with #{inspect value}"
@@ -524,23 +522,23 @@ defmodule ExMemcached.Server do
                 %LoopState{state: :replace, key: k, flags: binary_to_integer(flags), exptime: binary_to_integer(exptime), data_length: binary_to_integer(data_length), no_reply: nr}
               catch
                 :error, :badarg ->
-                  send_ascii_reply :bad_command_line, server_state
+                  A.send_ascii_reply :bad_command_line, server_state
                   %LoopState{}
                 what, value ->
                   Lager.info "8> Caught #{inspect what} with #{inspect value}"
                   %LoopState{}
               end
             _ ->
-              send_error(server_state)
+              A.send_error(server_state)
               loop_state = %LoopState{}
           end
         {:replace, _} when cmd_size == data_length ->
-          replace_cmd(loop_state, cmd, server_state)
+          A.replace_cmd(loop_state, cmd, server_state)
           loop_state = %LoopState{}
         {:replace, _} when cmd_size < data_length ->
           case read_remainder_ascii(server_state, cmd, data_length) do
             {cmd, rest} ->
-              replace_cmd(loop_state, cmd, server_state)
+              A.replace_cmd(loop_state, cmd, server_state)
               loop_state = %LoopState{}
               server_state = cond do
                 size(rest) > 0 -> %ServerState{server_state | existing_data: rest}
@@ -552,7 +550,7 @@ defmodule ExMemcached.Server do
           end
         {:replace, _} ->
           Lager.info "bad data length"
-          send_error(server_state)
+          A.send_error(server_state)
           loop_state = %LoopState{}
         {:commands, "append"} ->
           case parts do
@@ -561,7 +559,7 @@ defmodule ExMemcached.Server do
                 %LoopState{state: :append, key: k, flags: binary_to_integer(flags), exptime: binary_to_integer(exptime), data_length: binary_to_integer(data_length)}
               catch
                 :error, :badarg ->
-                  send_ascii_reply :bad_command_line, server_state
+                  A.send_ascii_reply :bad_command_line, server_state
                   %LoopState{}
                 what, value ->
                   Lager.info "9> Caught #{inspect what} with #{inspect value}"
@@ -572,23 +570,23 @@ defmodule ExMemcached.Server do
                 %LoopState{state: :append, key: k, flags: binary_to_integer(flags), exptime: binary_to_integer(exptime), data_length: binary_to_integer(data_length), no_reply: nr}
               catch
                 :error, :badarg ->
-                  send_ascii_reply :bad_command_line, server_state
+                  A.send_ascii_reply :bad_command_line, server_state
                   %LoopState{}
                 what, value ->
                   Lager.info "10> Caught #{inspect what} with #{inspect value}"
                   %LoopState{}
               end
             _ ->
-              send_error(server_state)
+              A.send_error(server_state)
               loop_state = %LoopState{}
           end
         {:append, _} when cmd_size == data_length ->
-          append_cmd(loop_state, cmd, server_state)
+          A.append_cmd(loop_state, cmd, server_state)
           loop_state = %LoopState{}
         {:append, _} when cmd_size < data_length ->
           case read_remainder_ascii(server_state, cmd, data_length) do
             {cmd, rest} ->
-              append_cmd(loop_state, cmd, server_state)
+              A.append_cmd(loop_state, cmd, server_state)
               loop_state = %LoopState{}
               server_state = cond do
                 size(rest) > 0 -> %ServerState{server_state | existing_data: rest}
@@ -600,7 +598,7 @@ defmodule ExMemcached.Server do
           end
         {:append, _} ->
           Lager.info "bad data length"
-          send_error(server_state)
+          A.send_error(server_state)
           loop_state = %LoopState{}
         {:commands, "prepend"} ->
           case parts do
@@ -609,7 +607,7 @@ defmodule ExMemcached.Server do
                 %LoopState{state: :prepend, key: k, flags: binary_to_integer(flags), exptime: binary_to_integer(exptime), data_length: binary_to_integer(data_length)}
               catch
                 :error, :badarg ->
-                  send_ascii_reply :bad_command_line, server_state
+                  A.send_ascii_reply :bad_command_line, server_state
                   %LoopState{}
                 what, value ->
                   Lager.info "11> Caught #{inspect what} with #{inspect value}"
@@ -620,23 +618,23 @@ defmodule ExMemcached.Server do
                 %LoopState{state: :prepend, key: k, flags: binary_to_integer(flags), exptime: binary_to_integer(exptime), data_length: binary_to_integer(data_length), no_reply: nr}
               catch
                 :error, :badarg ->
-                  send_ascii_reply :bad_command_line, server_state
+                  A.send_ascii_reply :bad_command_line, server_state
                   %LoopState{}
                 what, value ->
                   Lager.info "12> Caught #{inspect what} with #{inspect value}"
                   %LoopState{}
               end
             _ ->
-              send_error(server_state)
+              A.send_error(server_state)
               loop_state = %LoopState{}
           end
         {:prepend, _} when cmd_size == data_length ->
-          prepend_cmd(loop_state, cmd, server_state)
+          A.prepend_cmd(loop_state, cmd, server_state)
           loop_state = %LoopState{}
         {:prepend, _} when cmd_size < data_length ->
           case read_remainder_ascii(server_state, cmd, data_length) do
             {cmd, rest} ->
-              prepend_cmd(loop_state, cmd, server_state)
+              A.prepend_cmd(loop_state, cmd, server_state)
               loop_state = %LoopState{}
               server_state = cond do
                 size(rest) > 0 -> %ServerState{server_state | existing_data: rest}
@@ -648,7 +646,7 @@ defmodule ExMemcached.Server do
           end
         {:prepend, _} ->
           Lager.info "bad data length"
-          send_error(server_state)
+          A.send_error(server_state)
           loop_state = %LoopState{}
         {:commands, "cas"} ->
           case parts do
@@ -657,7 +655,7 @@ defmodule ExMemcached.Server do
                 %LoopState{state: :cas, key: k, flags: binary_to_integer(flags), exptime: binary_to_integer(exptime), data_length: binary_to_integer(data_length), cas: binary_to_integer(cas)}
               catch
                 :error, :badarg ->
-                  send_ascii_reply :bad_command_line, server_state
+                  A.send_ascii_reply :bad_command_line, server_state
                   %LoopState{}
                 what, value ->
                   Lager.info "13> Caught #{inspect what} with #{inspect value}"
@@ -668,23 +666,23 @@ defmodule ExMemcached.Server do
                 %LoopState{state: :cas, key: k, flags: binary_to_integer(flags), exptime: binary_to_integer(exptime), data_length: binary_to_integer(data_length), cas: binary_to_integer(cas), no_reply: nr}
               catch
                 :error, :badarg ->
-                  send_ascii_reply :bad_command_line, server_state
+                  A.send_ascii_reply :bad_command_line, server_state
                   %LoopState{}
                 what, value ->
                   Lager.info "14> Caught #{inspect what} with #{inspect value}"
                   %LoopState{}
               end
             _ ->
-              send_error(server_state)
+              A.send_error(server_state)
               loop_state = %LoopState{loop_state | state: :commands}
           end
         {:cas, _} when cmd_size == data_length ->
-          cas_cmd(loop_state, cmd, server_state)
+          A.cas_cmd(loop_state, cmd, server_state)
           loop_state = %LoopState{}
         {:cas, _} when cmd_size < data_length ->
           case read_remainder_ascii(server_state, cmd, data_length) do
             {cmd, rest} ->
-              cas_cmd(loop_state, cmd, server_state)
+              A.cas_cmd(loop_state, cmd, server_state)
               loop_state = %LoopState{}
               server_state = cond do
                 size(rest) > 0 -> %ServerState{ server_state | existing_data: rest}
@@ -696,30 +694,30 @@ defmodule ExMemcached.Server do
           end
         {:cas, _} ->
           Lager.info "bad data length"
-          send_error(server_state)
+          A.send_error(server_state)
           loop_state = %LoopState{}
         {:commands, "delete"} ->
           [_|tail] = parts
-          delete_cmd(tail, server_state)
+          A.delete_cmd(tail, server_state)
           loop_state = %LoopState{}
         {:commands, "incr"} ->
           [_|tail] = parts
-          incr_cmd(tail, server_state)
+          A.incr_cmd(tail, server_state)
           loop_state = %LoopState{}
         {:commands, "decr"} ->
           [_|tail] = parts
-          decr_cmd(tail, server_state)
+          A.decr_cmd(tail, server_state)
           loop_state = %LoopState{}
         {:commands, "touch"} ->
           [_|tail] = parts
-          touch_cmd(tail, server_state)
+          A.touch_cmd(tail, server_state)
           loop_state = %LoopState{}
         {:commands, "flush_all"} ->
           [_|tail] = parts
-          flush_all_cmd(tail, server_state)
+          A.flush_all_cmd(tail, server_state)
           loop_state = %LoopState{}
         {:commands, "stats"} ->
-          stats_cmd(parts, server_state)
+          A.stats_cmd(parts, server_state)
           loop_state = %LoopState{}
         {:commands, "shutdown"} ->
           ServerState.close_transport(server_state)
@@ -732,8 +730,8 @@ defmodule ExMemcached.Server do
           loop_state = %LoopState{}
         {_, _} ->
           Lager.info "unknown command: #{cmd} in loop_state: #{inspect loop_state}"
-          send_error(server_state)
-          ServerState.close_transport(server_state)
+          A.send_error(server_state)
+          # ServerState.close_transport(server_state)
           loop_state = %LoopState{}
       end
       # Lager.info ">>> loop_state: #{inspect loop_state}"
@@ -741,274 +739,6 @@ defmodule ExMemcached.Server do
     end
     # Lager.info ">>> server_state: #{inspect server_state}"
     server_state
-  end
-
-  defp send_error(server_state) do
-    ServerState.send_data(server_state, <<"ERROR\r\n">>)
-  end
-
-  defp send_ascii_reply {:stored, _}, server_state do
-    ServerState.send_data(server_state, <<"STORED\r\n">>)
-  end
-
-  defp send_ascii_reply :not_stored, server_state do
-    ServerState.send_data(server_state, <<"NOT_STORED\r\n">>)
-  end
-
-  defp send_ascii_reply :exists, server_state do
-    ServerState.send_data(server_state, <<"EXISTS\r\n">>)
-  end
-
-  defp send_ascii_reply :not_found, server_state do
-    ServerState.send_data(server_state, <<"NOT_FOUND\r\n">>)
-  end
-
-  defp send_ascii_reply :deleted, server_state do
-    ServerState.send_data(server_state, <<"DELETED\r\n">>)
-  end
-
-  defp send_ascii_reply :touched, server_state do
-    ServerState.send_data(server_state, <<"TOUCHED\r\n">>)
-  end
-
-  defp send_ascii_reply :ok, server_state do
-    ServerState.send_data(server_state, <<"OK\r\n">>)
-  end
-
-  defp send_ascii_reply {value, _cas}, server_state do
-    ServerState.send_data(server_state, <<"#{value}\r\n">>)
-  end
-
-  defp send_ascii_reply :invalid_incr_decr, server_state do
-    ServerState.send_data(server_state, <<"CLIENT_ERROR cannot increment or decrement non-numeric value\r\n">>)
-  end
-
-  defp send_ascii_reply :bad_command_line, server_state do
-    ServerState.send_data(server_state, <<"CLIENT_ERROR bad command line format\r\n">>)
-  end
-
-  defp send_ascii_reply :bad_delete_command_line, server_state do
-    ServerState.send_data(server_state, <<"CLIENT_ERROR bad command line format.  Usage: delete <key> [noreply]\r\n">>)
-  end
-
-  defp send_ascii_reply :flush_disabled, server_state do
-    ServerState.send_data(server_state, <<"CLIENT_ERROR flush_all not allowed\r\n">>)
-  end
-
-  defp send_ascii_reply _, server_state do
-    send_error(server_state)
-  end
-
-  defp set_cmd(loop_state = %LoopState{no_reply: nil}, value, server_state) do
-    send_ascii_reply(ExMemcached.set(loop_state.key, value, loop_state.flags, loop_state.exptime, 0), server_state)
-  end
-
-  defp set_cmd(loop_state, value, _server_state) do
-    ExMemcached.set(loop_state.key, value, loop_state.flags, loop_state.exptime, 0)
-  end
-
-  defp add_cmd(loop_state = %LoopState{no_reply: nil}, value, server_state) do
-    send_ascii_reply(ExMemcached.add(loop_state.key, value, loop_state.flags, loop_state.exptime), server_state)
-  end
-
-  defp add_cmd(loop_state, value, _server_state) do
-    ExMemcached.add(loop_state.key, value, loop_state.flags, loop_state.exptime)
-  end
-
-  defp replace_cmd(loop_state = %LoopState{no_reply: nil}, value, server_state) do
-    send_ascii_reply(ExMemcached.replace(loop_state.key, value, loop_state.flags, loop_state.exptime), server_state)
-  end
-
-  defp replace_cmd(loop_state, value, _server_state) do
-    ExMemcached.replace(loop_state.key, value, loop_state.flags, loop_state.exptime)
-  end
-
-  defp append_cmd(loop_state = %LoopState{no_reply: nil}, value, server_state) do
-    send_ascii_reply(ExMemcached.append(loop_state.key, value, loop_state.flags, loop_state.exptime), server_state)
-  end
-
-  defp append_cmd(loop_state, value, _server_state) do
-    ExMemcached.append(loop_state.key, value, loop_state.flags, loop_state.exptime)
-  end
-
-  defp prepend_cmd(loop_state = %LoopState{no_reply: nil}, value, server_state) do
-    send_ascii_reply(ExMemcached.prepend(loop_state.key, value, loop_state.flags, loop_state.exptime), server_state)
-  end
-
-  defp prepend_cmd(loop_state, value, _server_state) do
-    ExMemcached.prepend(loop_state.key, value, loop_state.flags, loop_state.exptime)
-  end
-
-  defp cas_cmd(loop_state = %LoopState{no_reply: nil}, value, server_state) do
-    case loop_state.cas do
-      # this is a special case a REAL cas wll neve be 0. This means someone sent an invalid cas. Since
-      # we use the same backend as the biary commands a zero means don't check cas so send a -1 instead
-      0 -> send_ascii_reply(ExMemcached.set(loop_state.key, value, loop_state.flags, loop_state.exptime, -1), server_state)
-      _ -> send_ascii_reply(ExMemcached.set(loop_state.key, value, loop_state.flags, loop_state.exptime, loop_state.cas), server_state)
-    end
-  end
-
-  defp cas_cmd(loop_state, value, _server_state) do
-    ExMemcached.set(loop_state.key, value, loop_state.flags, loop_state.exptime, loop_state.cas)
-  end
-
-  defp get_cmd([key|tail], server_state) do
-    cond do
-      size(key) < 250 ->
-        buffer = case ExMemcached.get key do
-          :not_found ->
-            << >>
-          {value, flags, _cas} ->
-            if is_integer(value), do: value = integer_to_binary value
-            <<"VALUE #{key} #{flags} #{size(value)}\r\n">> <> value <> <<"\r\n">>
-        end
-        get_cmd tail, buffer, server_state
-      true ->
-        send_ascii_reply :bad_command_line, server_state
-    end
-  end
-
-  defp get_cmd([key|tail], buffer, server_state) do
-    cond do
-      size(key) <= 250 ->
-        buffer = case ExMemcached.get key do
-          :not_found ->
-            buffer # skip unfound values
-          {value, flags, _cas} ->
-            if is_integer(value), do: value = integer_to_binary value
-            buffer <> <<"VALUE #{key} #{flags} #{size(value)}\r\n">> <> value <> <<"\r\n">>
-        end
-        get_cmd tail, buffer, server_state
-      true ->
-        send_ascii_reply :bad_command_line, server_state
-    end
-  end
-
-  defp get_cmd([], buffer, server_state) do
-    ServerState.send_data(server_state, buffer <> <<"END\r\n">>)
-  end
-
-  defp gets_cmd([key|tail], server_state) do
-    buffer = case ExMemcached.get key do
-      :not_found ->
-        << >> # skip unfound values
-      {value, flags, cas} ->
-        if is_integer(value), do: value = integer_to_binary value
-        <<"VALUE #{key} #{flags} #{size(value)} #{cas}\r\n">> <> value <> <<"\r\n">>
-    end
-    gets_cmd tail, buffer, server_state
-  end
-
-  defp gets_cmd([key|tail], buffer, server_state) do
-    buffer = case ExMemcached.get key do
-      :not_found ->
-        buffer # skip unfound values
-      {value, flags, cas} ->
-        if is_integer(value), do: value = integer_to_binary value
-        buffer <> <<"VALUE #{key} #{flags} #{size(value)} #{cas}\r\n">> <> value <> <<"\r\n">>
-    end
-    gets_cmd tail, buffer, server_state
-  end
-
-  defp gets_cmd([], buffer, server_state) do
-    ServerState.send_data(server_state, buffer <> <<"END\r\n">>)
-  end
-
-  defp delete_cmd([key], server_state) do
-    send_ascii_reply(ExMemcached.delete(key), server_state)
-  end
-
-  defp delete_cmd([key, <<"noreply">>], _server_state) do
-    ExMemcached.delete(key)
-  end
-
-  defp delete_cmd([key, <<"0">>], server_state) do
-    send_ascii_reply(ExMemcached.delete(key), server_state)
-  end
-
-  defp delete_cmd([key, <<"0">>, <<"noreply">>], _server_state) do
-    ExMemcached.delete(key)
-  end
-
-  defp delete_cmd([_key, _], server_state) do
-    send_ascii_reply :bad_delete_command_line, server_state
-  end
-
-  defp delete_cmd([_key, _, <<"noreply">>], _server_state) do
-  end
-
-  defp touch_cmd([key, exiration], server_state) do
-    send_ascii_reply(ExMemcached.touch(key, exiration), server_state)
-  end
-
-  defp touch_cmd([key, exiration, _], _server_state) do
-    ExMemcached.touch(key, exiration)
-  end
-
-  defp flush_all_cmd([], server_state) do
-    case Application.get_env(:ex_memcached, :disable_flush_all) do
-      true -> send_ascii_reply :flush_disabled, server_state
-      false -> send_ascii_reply(ExMemcached.flush(0), server_state)
-    end
-  end
-
-  defp flush_all_cmd([exiration], server_state) do
-    case Application.get_env(:ex_memcached, :disable_flush_all) do
-      true -> send_ascii_reply :flush_disabled, server_state
-      false -> send_ascii_reply(ExMemcached.flush(exiration), server_state)
-    end
-  end
-
-  defp incr_cmd([key], server_state) do
-    send_ascii_reply(ExMemcached.incr(key, 1, 0, 0xffffffff), server_state)
-  end
-
-  defp incr_cmd([key, count], server_state) do
-    send_ascii_reply(ExMemcached.incr(key, binary_to_integer(count), 0, 0xffffffff), server_state)
-  end
-
-  defp incr_cmd([key, count, _], _server_state) do
-    ExMemcached.incr(key, binary_to_integer(count))
-  end
-
-  defp decr_cmd([key], server_state) do
-    send_ascii_reply(ExMemcached.decr(key, 1, 0, 0xffffffff), server_state)
-  end
-
-  defp decr_cmd([key, count], server_state) do
-    send_ascii_reply(ExMemcached.decr(key, binary_to_integer(count), 0, 0xffffffff), server_state)
-  end
-
-  defp decr_cmd([key, count, _], _server_state) do
-    ExMemcached.incr(key, binary_to_integer(count))
-  end
-
-  defp stats_cmd(["stats", "cachedump", "1", "0", "0"], server_state) do
-    ServerState.send_data(server_state, <<"END\r\n">>)
-  end
-
-  defp stats_cmd(["stats", "cachedump", "200", "0", "0"], server_state) do
-    ServerState.send_data(server_state, <<"CLIENT_ERROR\r\n">>)
-  end
-
-  defp stats_cmd(["stats", "slabs"], server_state) do
-    ServerState.send_data(server_state, <<"STAT total_malloced 4294967328\r\n">>)
-    ServerState.send_data(server_state, <<"STAT active_slabs 0\r\n">>)
-    ServerState.send_data(server_state, <<"END\r\n">>)
-  end
-
-  defp stats_cmd(["stats", _value], server_state) do
-    ServerState.send_data(server_state, <<"END\r\n">>)
-  end
-
-  defp stats_cmd(["stats", _value, _parameter], server_state) do
-    ServerState.send_data(server_state, <<"END\r\n">>)
-  end
-
-  defp stats_cmd(["stats"], server_state) do
-    ServerState.send_data(server_state, <<"STAT pointer_size 64\r\n">>)
-    ServerState.send_data(server_state, <<"STAT limit_maxbytes 4297064448\r\n">>)
-    ServerState.send_data(server_state, <<"END\r\n">>)
   end
 
   def read_remainder_ascii(server_state, data, expected) do
@@ -1081,5 +811,4 @@ defmodule ExMemcached.Server do
     B.send_response_header(server_state, opcode, keylen, 0, 0, Bd.protocol_binray_response_success, keylen + value_len, opaque)
     ServerState.send_data(server_state, key <> value)
   end
-
 end
