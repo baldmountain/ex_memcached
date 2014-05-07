@@ -49,7 +49,7 @@ defmodule ExMemcached.Server do
       data = read_expected server_state, data, 24
       << Bd.protocol_binary_req, opcode, keylen::[big, unsigned, integer, size(16)], extlen, datatype, reserved::[big, unsigned, integer, size(16)],
         bodylen::[big, unsigned, integer, size(32)], opaque::[big, unsigned, integer, size(32)], cas::[big, unsigned, integer, size(64)], tail::binary >> = data
-        Lager.info "#{Bd.opcode_description opcode} keylen #{keylen} extlen #{extlen} datatype #{datatype} reserved #{reserved} bodylen #{bodylen} opaque #{opaque} cas #{cas}"
+        # Lager.info "#{Bd.opcode_description opcode} keylen #{keylen} extlen #{extlen} datatype #{datatype} reserved #{reserved} bodylen #{bodylen} opaque #{opaque} cas #{cas}"
 
       if keylen > 250 do
         B.send_error(server_state, opcode, opaque, Bd.protocol_binray_response_e2big)
@@ -377,7 +377,7 @@ defmodule ExMemcached.Server do
     {server_state, _} = Enum.reduce cmds, {server_state, %LoopState{} }, fn(cmd, {server_state, loop_state}) ->
       command = if (loop_state.state == :commands) do
         parts = String.split cmd, " "
-        Lager.info ">>> #{inspect parts}"
+        # Lager.info ">>> #{inspect parts}"
         List.first(parts)
       end
       # for gurds
@@ -750,7 +750,7 @@ defmodule ExMemcached.Server do
         [read, rest] = String.split data, "\r\n", global: false
         {read, rest}
       true ->
-        case server_state.transport.recv(server_state.socket, 0, @receive_timeout) do
+        case server_state.transport.recv(server_state.socket, expected - len + 2, @receive_timeout) do
           {:ok, read} ->
             read_remainder_ascii(server_state, data <> read, expected)
           res ->
@@ -762,13 +762,14 @@ defmodule ExMemcached.Server do
   end
 
   def read_remainder(server_state, data, expected) do
+    len = size(data)
     cond do
-      size(data) == expected -> data
-      size(data) > expected ->
+      len == expected -> data
+      len > expected ->
         <<data::[binary, size(expected)], rest::binary >> = data
         {data, rest}
       true ->
-        case server_state.transport.recv(server_state.socket, 0, @receive_timeout) do
+        case server_state.transport.recv(server_state.socket, expected - len, @receive_timeout) do
           {:ok, read} ->
             read_remainder(server_state, data <> read, expected)
           res ->
