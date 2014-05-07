@@ -239,7 +239,8 @@ defmodule ExMemcached.Worker do
 
   def handle_call({:flush, expiration}, _from, {data, work_state}) do
     expiration = cond do
-      is_binary(expiration) -> binary_to_integer expiration
+      is_binary(expiration) && size(expiration) > 0 -> binary_to_integer expiration
+      is_binary(expiration) -> 0
       true -> expiration
     end
     case expiration do
