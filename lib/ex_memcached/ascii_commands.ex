@@ -243,7 +243,7 @@ defmodule ExMemcached.AsciiCommands do
   end
 
   def incr_cmd([key, count, _], _server_state) do
-    ExMemcached.incr(key, binary_to_integer(count))
+    ExMemcached.incr(key, binary_to_integer(count), 0, 0xffffffff)
   end
 
   def decr_cmd([key], server_state) do
@@ -255,7 +255,7 @@ defmodule ExMemcached.AsciiCommands do
   end
 
   def decr_cmd([key, count, _], _server_state) do
-    ExMemcached.incr(key, binary_to_integer(count))
+    ExMemcached.decr(key, binary_to_integer(count), 0, 0xffffffff)
   end
 
   def verbosity_cmd([_cmd, _value], server_state) do
