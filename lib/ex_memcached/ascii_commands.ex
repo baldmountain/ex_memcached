@@ -205,7 +205,7 @@ defmodule ExMemcached.AsciiCommands do
     send_ascii_reply(ExMemcached.touch(key, exiration), server_state)
   end
 
-  def touch_cmd([key, exiration, _], _server_state) do
+  def touch_cmd([key, exiration, <<"noreply">>], _server_state) do
     ExMemcached.touch(key, exiration)
   end
 
@@ -216,10 +216,21 @@ defmodule ExMemcached.AsciiCommands do
     end
   end
 
-  def flush_all_cmd([exiration], server_state) do
+  def flush_all_cmd([expiration], server_state) do
     case Application.get_env(:ex_memcached, :disable_flush_all) do
       true -> send_ascii_reply :flush_disabled, server_state
-      false -> send_ascii_reply(ExMemcached.flush(exiration), server_state)
+      false ->
+        case expiration do
+          <<"noreply">> -> ExMemcached.flush(0)
+          _ -> send_ascii_reply(ExMemcached.flush(expiration), server_state)
+        end
+    end
+  end
+
+  def flush_all_cmd([expiration, <<"noreply">>], server_state) do
+    case Application.get_env(:ex_memcached, :disable_flush_all) do
+      true -> send_ascii_reply :flush_disabled, server_state
+      false -> ExMemcached.flush(expiration)
     end
   end
 
@@ -245,6 +256,13 @@ defmodule ExMemcached.AsciiCommands do
 
   def decr_cmd([key, count, _], _server_state) do
     ExMemcached.incr(key, binary_to_integer(count))
+  end
+
+  def verbosity_cmd([_cmd, _value], server_state) do
+    ServerState.send_data(server_state, <<"OK\r\n">>)
+  end
+
+  def verbosity_cmd([_cmd, _value, <<"noreply">>], _server_state) do
   end
 
   def stats_cmd(["stats", "cachedump", "1", "0", "0"], server_state) do

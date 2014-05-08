@@ -718,6 +718,8 @@ defmodule ExMemcached.Server do
           loop_state = %LoopState{}
         {:commands, "stats"} ->
           A.stats_cmd(parts, server_state)
+        {:commands, "verbosity"} ->
+          A.verbosity_cmd(parts, server_state)
           loop_state = %LoopState{}
         {:commands, "shutdown"} ->
           ServerState.close_transport(server_state)
