@@ -744,15 +744,14 @@ defmodule ExMemcached.Server do
   end
 
   def read_remainder_ascii(server_state, data, expected) do
+    buf_len = expected + 2
     len = size(data)
     cond do
-      len == expected -> data
-      len == expected + 1 -> { String.slice(data, 0..-2), <<"\r">> }
-      len > expected ->
-        [read, rest] = String.split data, "\r\n", global: false
-        {read, rest}
+      len == buf_len -> { String.slice(data, 0..-3), <<>> }
+      len > buf_len ->
+        { String.slice(data, 0..buf_len-3), String.slice(data, buf_len..-1) }
       true ->
-        case server_state.transport.recv(server_state.socket, expected - len + 2, @receive_timeout) do
+        case server_state.transport.recv(server_state.socket, buf_len - len, @receive_timeout) do
           {:ok, read} ->
             read_remainder_ascii(server_state, data <> read, expected)
           res ->
