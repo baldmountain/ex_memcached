@@ -4,7 +4,7 @@ defmodule ExMemcached.Mixfile do
   def project do
     [ app: :ex_memcached,
       version: "0.0.1",
-      elixir: "~> 0.13.0",
+      elixir: "~> 0.13.1",
       deps: deps,
       elixirc_options: options(Mix.env) ]
   end
@@ -13,7 +13,7 @@ defmodule ExMemcached.Mixfile do
   def application do
     [
       mod: { ExMemcached, [] },
-      applications: [:xgen, :exlager, :ranch],
+      applications: [:xgen, :exlager, :ranch, :sasl],
       # application configuration goes here:
       env: [
         listen_port: 8080,
