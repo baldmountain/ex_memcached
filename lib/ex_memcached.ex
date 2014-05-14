@@ -23,54 +23,54 @@ defmodule ExMemcached do
 
   # Wrappers around the calls to worker.ex
   def set key, value, flags, exptime, cas do
-    :gen_server.call(:cache, {:set, key, value, flags, exptime, cas})
+    GenServer.call(:cache, {:set, key, value, flags, exptime, cas})
   end
 
   def add key, value, flags, exptime do
-    :gen_server.call(:cache, {:add, key, value, flags, exptime})
+    GenServer.call(:cache, {:add, key, value, flags, exptime})
   end
 
   def replace key, value, flags, exptime do
-    :gen_server.call(:cache, {:replace, key, value, flags, exptime})
+    GenServer.call(:cache, {:replace, key, value, flags, exptime})
   end
 
   def get key do
-    :gen_server.call(:cache, {:get, key})
+    GenServer.call(:cache, {:get, key})
   end
 
   def gat key, exptime do
-    :gen_server.call(:cache, {:gat, key, exptime})
+    GenServer.call(:cache, {:gat, key, exptime})
   end
 
   def delete key do
-    :gen_server.call(:cache, {:delete, key})
+    GenServer.call(:cache, {:delete, key})
   end
 
   def touch key, expiration do
-    :gen_server.call(:cache, {:touch, key, expiration})
+    GenServer.call(:cache, {:touch, key, expiration})
   end
 
   def incr key, count, initial, expiration  do
-    :gen_server.call(:cache, {:incr, key, count, initial, expiration})
+    GenServer.call(:cache, {:incr, key, count, initial, expiration})
   end
 
   def decr key, count, initial, expiration  do
-    :gen_server.call(:cache, {:decr, key, count, initial, expiration})
+    GenServer.call(:cache, {:decr, key, count, initial, expiration})
   end
 
   def flush expiration do
-    :gen_server.call(:cache, {:flush, expiration})
+    GenServer.call(:cache, {:flush, expiration})
   end
 
   def append key, value, flags, exptime do
-    :gen_server.call(:cache, {:append, key, value, flags, exptime})
+    GenServer.call(:cache, {:append, key, value, flags, exptime})
   end
 
   def prepend key, value, flags, exptime do
-    :gen_server.call(:cache, {:prepend, key, value, flags, exptime})
+    GenServer.call(:cache, {:prepend, key, value, flags, exptime})
   end
 
   def cas key, value, flags, exptime, cas do
-    :gen_server.call(:cache, {:cas, key, value, flags, exptime, cas})
+    GenServer.call(:cache, {:cas, key, value, flags, exptime, cas})
   end
 end

@@ -19,7 +19,7 @@ defmodule ExMemcached.Worker do
   end
 
   def start_link do
-      GenServer.start_link(__MODULE__, [], local: :cache)
+      GenServer.start_link(__MODULE__, [], name: :cache)
   end
 
   def init([]) do
