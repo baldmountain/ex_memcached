@@ -441,16 +441,22 @@ defmodule ExMemcached.Server do
                   ExMemcached.delete loop_state.key
                   ServerState.send_data(server_state, <<"SERVER_ERROR object too large for cache\r\n">>)
               end
-              loop_state = %LoopState{}
               server_state = cond do
                 size(rest) > 0 ->
                   %ServerState{server_state | existing_data: rest}
                 true -> server_state
               end
-            _ ->
-              loop_state = %LoopState{}
-              :ok
+            cmd ->
+              cond do
+                data_length <= Application.get_env(:ex_memcached, :max_data_size) ->
+                  A.set_cmd(loop_state, cmd, server_state)
+                true ->
+                  Lager.info "Object #{loop_state.key} too big for cache"
+                  ExMemcached.delete loop_state.key
+                  ServerState.send_data(server_state, <<"SERVER_ERROR object too large for cache\r\n">>)
+              end
           end
+          loop_state = %LoopState{}
         {:set, _} ->
           Lager.info "Object #{loop_state.key} too big for cache"
           ExMemcached.delete loop_state.key
@@ -491,15 +497,14 @@ defmodule ExMemcached.Server do
           case read_remainder_ascii(server_state, cmd, data_length) do
             {cmd, rest} ->
               A.add_cmd(loop_state, cmd, server_state)
-              loop_state = %LoopState{}
               server_state = cond do
                 size(rest) > 0 -> %ServerState{server_state | existing_data: rest}
                 true -> server_state
               end
-            _ ->
-              loop_state = %LoopState{}
-              :ok
+            cmd ->
+              A.add_cmd(loop_state, cmd, server_state)
           end
+          loop_state = %LoopState{}
         {:add, _} ->
           Lager.info "bad data length"
           A.send_error(server_state)
@@ -539,15 +544,14 @@ defmodule ExMemcached.Server do
           case read_remainder_ascii(server_state, cmd, data_length) do
             {cmd, rest} ->
               A.replace_cmd(loop_state, cmd, server_state)
-              loop_state = %LoopState{}
-              server_state = cond do
+                server_state = cond do
                 size(rest) > 0 -> %ServerState{server_state | existing_data: rest}
                 true -> server_state
               end
-            _ ->
-              loop_state = %LoopState{}
-              :ok
+            cmd
+              A.replace_cmd(loop_state, cmd, server_state)
           end
+          loop_state = %LoopState{}
         {:replace, _} ->
           Lager.info "bad data length"
           A.send_error(server_state)
@@ -587,15 +591,14 @@ defmodule ExMemcached.Server do
           case read_remainder_ascii(server_state, cmd, data_length) do
             {cmd, rest} ->
               A.append_cmd(loop_state, cmd, server_state)
-              loop_state = %LoopState{}
               server_state = cond do
                 size(rest) > 0 -> %ServerState{server_state | existing_data: rest}
                 true -> server_state
               end
-            _ ->
-              loop_state = %LoopState{}
-              :ok
+            cmd ->
+              A.append_cmd(loop_state, cmd, server_state)
           end
+          loop_state = %LoopState{}
         {:append, _} ->
           Lager.info "bad data length"
           A.send_error(server_state)
@@ -635,15 +638,14 @@ defmodule ExMemcached.Server do
           case read_remainder_ascii(server_state, cmd, data_length) do
             {cmd, rest} ->
               A.prepend_cmd(loop_state, cmd, server_state)
-              loop_state = %LoopState{}
               server_state = cond do
                 size(rest) > 0 -> %ServerState{server_state | existing_data: rest}
                 true -> server_state
               end
-            _ ->
-              loop_state = %LoopState{}
-              :ok
+            cmd ->
+              A.prepend_cmd(loop_state, cmd, server_state)
           end
+          loop_state = %LoopState{}
         {:prepend, _} ->
           Lager.info "bad data length"
           A.send_error(server_state)
@@ -683,15 +685,14 @@ defmodule ExMemcached.Server do
           case read_remainder_ascii(server_state, cmd, data_length) do
             {cmd, rest} ->
               A.cas_cmd(loop_state, cmd, server_state)
-              loop_state = %LoopState{}
               server_state = cond do
                 size(rest) > 0 -> %ServerState{ server_state | existing_data: rest}
                 true -> server_state
               end
-            _ ->
-              loop_state = %LoopState{}
-              :ok
+            cmd ->
+              A.cas_cmd(loop_state, cmd, server_state)
           end
+          loop_state = %LoopState{}
         {:cas, _} ->
           Lager.info "bad data length"
           A.send_error(server_state)
@@ -747,7 +748,7 @@ defmodule ExMemcached.Server do
     buf_len = expected + 2
     len = size(data)
     cond do
-      len == buf_len -> { String.slice(data, 0..-3), <<>> }
+      len == buf_len -> String.slice(data, 0..-3)
       len > buf_len ->
         { String.slice(data, 0..buf_len-3), String.slice(data, buf_len..-1) }
       true ->
