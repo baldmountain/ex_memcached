@@ -15,12 +15,7 @@ defmodule ExMemcached.Mixfile do
       mod: { ExMemcached, [] },
       applications: [:xgen, :exlager, :ranch, :sasl],
       # application configuration goes here:
-      env: [
-        listen_port: 8080,
-        max_data_size: 1024*1024,
-        max_connections: 1024,
-        disable_flush_all: false
-      ]
+      env: [ ]
     ]
   end
 
