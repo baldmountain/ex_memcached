@@ -3,18 +3,18 @@ defmodule ExMemcached.Worker do
   require Lager
 
   defmodule WorkerState do
-    defstruct misses: 0, hits: 0, allocated: 0, current_cas: 1
+    defstruct get_misses: 0, get_hits: 0, allocated: 0, current_cas: 1
 
     def next_cas(ws = %WorkerState{}) do
       %WorkerState{ws | current_cas: ws.current_cas + 1}
     end
 
     def hit(ws = %WorkerState{}) do
-      %WorkerState{ws | hits: ws.hits + 1}
+      %WorkerState{ws | get_hits: ws.get_hits + 1}
     end
 
     def miss(ws = %WorkerState{}) do
-      %WorkerState{ws | misses: ws.misses + 1}
+      %WorkerState{ws | get_misses: ws.get_misses + 1}
     end
 
     def allocated_change(ws = %WorkerState{}, change) do
@@ -46,7 +46,6 @@ defmodule ExMemcached.Worker do
   end
 
   def handle_call({:set, key, value, flags, exptime, cas}, _from, {data, work_state}) do
-    Lager.info ">>>> #{inspect work_state}"
     case cas do
       0 ->
         data = Dict.put(data, key, {value, generate_expire_time(exptime), flags, exptime, work_state.current_cas})
@@ -275,6 +274,17 @@ defmodule ExMemcached.Worker do
           end
         { :reply, :ok, {data, work_state} }
     end
+  end
+
+  def handle_call({:stats}, _from, {data, work_state}) do
+    { :reply,
+      %{
+        get_hits: work_state.get_hits,
+        get_misses: work_state.get_misses,
+        curr_items: Dict.size(data),
+        bytes: work_state.allocated
+      },
+      {data, work_state} }
   end
 
   defp generate_expire_time(exptime) do

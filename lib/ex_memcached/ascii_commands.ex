@@ -288,8 +288,32 @@ defmodule ExMemcached.AsciiCommands do
   end
 
   def stats_cmd(["stats"], server_state) do
+    stats = ExMemcached.stats
+    {ms,sec,_} = :os.timestamp
+    now = ms*1000000+sec
+
+    # ServerState.send_data(server_state, <<"STAT pid 64\r\n">>)
+    # ServerState.send_data(server_state, <<"STAT uptime 64\r\n">>)
     ServerState.send_data(server_state, <<"STAT pointer_size 64\r\n">>)
+    ServerState.send_data(server_state, <<"STAT time #{now}\r\n">>)
+    ServerState.send_data(server_state, <<"STAT version 0.0.1\r\n">>)
+    # ServerState.send_data(server_state, <<"STAT rusage_user 64\r\n">>)
+    # ServerState.send_data(server_state, <<"STAT rusage_system 64\r\n">>)
+    ServerState.send_data(server_state, <<"STAT curr_items #{stats.curr_items}\r\n">>)
+    # ServerState.send_data(server_state, <<"STAT total_items 64\r\n">>)
+    ServerState.send_data(server_state, <<"STAT bytes #{stats.bytes}\r\n">>)
+    # ServerState.send_data(server_state, <<"STAT curr_connections 64\r\n">>)
+    # ServerState.send_data(server_state, <<"STAT total_connections 64\r\n">>)
+    # ServerState.send_data(server_state, <<"STAT connection_structures 64\r\n">>)
+    # ServerState.send_data(server_state, <<"STAT cmd_get 64\r\n">>)
+    # ServerState.send_data(server_state, <<"STAT cmd_set 64\r\n">>)
+    ServerState.send_data(server_state, <<"STAT get_hits #{stats.curr_items}\r\n">>)
+    ServerState.send_data(server_state, <<"STAT get_misses #{stats.curr_items}\r\n">>)
+    # ServerState.send_data(server_state, <<"STAT evictions 64\r\n">>)
+    # ServerState.send_data(server_state, <<"STAT bytes_read 64\r\n">>)
+    # ServerState.send_data(server_state, <<"STAT bytes_written 64\r\n">>)
     ServerState.send_data(server_state, <<"STAT limit_maxbytes 4297064448\r\n">>)
+    # ServerState.send_data(server_state, <<"STAT threads 64\r\n">>)
     ServerState.send_data(server_state, <<"END\r\n">>)
   end
 end

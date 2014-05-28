@@ -73,4 +73,8 @@ defmodule ExMemcached do
   def cas key, value, flags, exptime, cas do
     GenServer.call(:cache, {:cas, key, value, flags, exptime, cas})
   end
+
+  def stats do
+    GenServer.call(:cache, {:stats})
+  end
 end
