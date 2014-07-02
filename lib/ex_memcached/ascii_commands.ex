@@ -118,13 +118,13 @@ defmodule ExMemcached.AsciiCommands do
 
   def get_cmd([key|tail], server_state) do
     cond do
-      size(key) < 250 ->
+      byte_size(key) < 250 ->
         buffer = case ExMemcached.get key do
           :not_found ->
             << >>
           {value, flags, _cas} ->
-            if is_integer(value), do: value = integer_to_binary value
-            <<"VALUE #{key} #{flags} #{size(value)}\r\n">> <> value <> <<"\r\n">>
+            if is_integer(value), do: value = :erlang.integer_to_binary value
+            <<"VALUE #{key} #{flags} #{byte_size(value)}\r\n">> <> value <> <<"\r\n">>
         end
         get_cmd tail, buffer, server_state
       true ->
@@ -134,13 +134,13 @@ defmodule ExMemcached.AsciiCommands do
 
   def get_cmd([key|tail], buffer, server_state) do
     cond do
-      size(key) <= 250 ->
+      byte_size(key) <= 250 ->
         buffer = case ExMemcached.get key do
           :not_found ->
             buffer # skip unfound values
           {value, flags, _cas} ->
-            if is_integer(value), do: value = integer_to_binary value
-            buffer <> <<"VALUE #{key} #{flags} #{size(value)}\r\n">> <> value <> <<"\r\n">>
+            if is_integer(value), do: value = :erlang.integer_to_binary value
+            buffer <> <<"VALUE #{key} #{flags} #{byte_size(value)}\r\n">> <> value <> <<"\r\n">>
         end
         get_cmd tail, buffer, server_state
       true ->
@@ -157,8 +157,8 @@ defmodule ExMemcached.AsciiCommands do
       :not_found ->
         << >> # skip unfound values
       {value, flags, cas} ->
-        if is_integer(value), do: value = integer_to_binary value
-        <<"VALUE #{key} #{flags} #{size(value)} #{cas}\r\n">> <> value <> <<"\r\n">>
+        if is_integer(value), do: value = :erlang.integer_to_binary value
+        <<"VALUE #{key} #{flags} #{byte_size(value)} #{cas}\r\n">> <> value <> <<"\r\n">>
     end
     gets_cmd tail, buffer, server_state
   end
@@ -168,8 +168,8 @@ defmodule ExMemcached.AsciiCommands do
       :not_found ->
         buffer # skip unfound values
       {value, flags, cas} ->
-        if is_integer(value), do: value = integer_to_binary value
-        buffer <> <<"VALUE #{key} #{flags} #{size(value)} #{cas}\r\n">> <> value <> <<"\r\n">>
+        if is_integer(value), do: value = :erlang.integer_to_binary value
+        buffer <> <<"VALUE #{key} #{flags} #{byte_size(value)} #{cas}\r\n">> <> value <> <<"\r\n">>
     end
     gets_cmd tail, buffer, server_state
   end
@@ -239,11 +239,11 @@ defmodule ExMemcached.AsciiCommands do
   end
 
   def incr_cmd([key, count], server_state) do
-    send_ascii_reply(ExMemcached.incr(key, binary_to_integer(count), 0, 0xffffffff), server_state)
+    send_ascii_reply(ExMemcached.incr(key, :erlang.binary_to_integer(count), 0, 0xffffffff), server_state)
   end
 
   def incr_cmd([key, count, _], _server_state) do
-    ExMemcached.incr(key, binary_to_integer(count), 0, 0xffffffff)
+    ExMemcached.incr(key, :erlang.binary_to_integer(count), 0, 0xffffffff)
   end
 
   def decr_cmd([key], server_state) do
@@ -251,11 +251,11 @@ defmodule ExMemcached.AsciiCommands do
   end
 
   def decr_cmd([key, count], server_state) do
-    send_ascii_reply(ExMemcached.decr(key, binary_to_integer(count), 0, 0xffffffff), server_state)
+    send_ascii_reply(ExMemcached.decr(key, :erlang.binary_to_integer(count), 0, 0xffffffff), server_state)
   end
 
   def decr_cmd([key, count, _], _server_state) do
-    ExMemcached.decr(key, binary_to_integer(count), 0, 0xffffffff)
+    ExMemcached.decr(key, :erlang.binary_to_integer(count), 0, 0xffffffff)
   end
 
   def verbosity_cmd([_cmd, _value], server_state) do
@@ -279,11 +279,11 @@ defmodule ExMemcached.AsciiCommands do
     ServerState.send_data(server_state, <<"END\r\n">>)
   end
 
-  def stats_cmd(["stats", _value], server_state) do
+  def stats_cmd(["stats", value], server_state) do
     ServerState.send_data(server_state, <<"END\r\n">>)
   end
 
-  def stats_cmd(["stats", _value, _parameter], server_state) do
+  def stats_cmd(["stats", value, parameter], server_state) do
     ServerState.send_data(server_state, <<"END\r\n">>)
   end
 
@@ -291,12 +291,13 @@ defmodule ExMemcached.AsciiCommands do
     stats = ExMemcached.stats
     {ms,sec,_} = :os.timestamp
     now = ms*1000000+sec
+    {_, state} = :application.get_all_key :ex_memcached
 
     # ServerState.send_data(server_state, <<"STAT pid 64\r\n">>)
     # ServerState.send_data(server_state, <<"STAT uptime 64\r\n">>)
     ServerState.send_data(server_state, <<"STAT pointer_size 64\r\n">>)
     ServerState.send_data(server_state, <<"STAT time #{now}\r\n">>)
-    ServerState.send_data(server_state, <<"STAT version 0.0.1\r\n">>)
+    ServerState.send_data(server_state, <<"STAT version #{state[:vsn]}\r\n">>)
     # ServerState.send_data(server_state, <<"STAT rusage_user 64\r\n">>)
     # ServerState.send_data(server_state, <<"STAT rusage_system 64\r\n">>)
     ServerState.send_data(server_state, <<"STAT curr_items #{stats.curr_items}\r\n">>)

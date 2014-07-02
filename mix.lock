@@ -1,6 +1,6 @@
-%{"conform": {:package, "0.4.0"},
+%{"conform": {:package, "0.7.4"},
   "exlager": {:git, "git://github.com/khia/exlager.git", "99eb3fb763ae546edfe2ac3dd181987a4872dfcc", []},
-  "exrm": {:git, "git://github.com/bitwalker/exrm.git", "80d5deb44b61733097fba89a3d2280e7c3446070", []},
+  "exrm": {:git, "git://github.com/bitwalker/exrm.git", "847b44c820e892b82c9dfa3c705805da9073243a", []},
   "goldrush": {:git, "git://github.com/DeadZen/goldrush.git", "71e63212f12c25827e0c1b4198d37d5d018a7fec", [tag: "0.1.6"]},
   "lager": {:git, "https://github.com/basho/lager.git", "4d8291edb72a25ac0efde907e2ecaa115108ff90", []},
-  "ranch": {:git, "git://github.com/extend/ranch.git", "ad2c080dc2825c9c705f8e542298253834abee1c", []}}
+  "ranch": {:git, "git://github.com/extend/ranch.git", "1080b3a173b881f79d7cfd65cea572036ba35fe6", []}}

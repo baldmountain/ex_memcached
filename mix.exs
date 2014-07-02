@@ -4,9 +4,9 @@ defmodule ExMemcached.Mixfile do
   def project do
     [ app: :ex_memcached,
       version: "0.0.1",
-      elixir: "~> 0.13.3",
-      deps: deps,
-      elixirc_options: options(Mix.env) ]
+      elixir: "> 0.14.1",
+      deps: deps]
+      # elixirc_options: options(Mix.env) ]
   end
 
   # Configuration for the OTP application
