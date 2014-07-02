@@ -13,7 +13,7 @@ defmodule ExMemcached.Mixfile do
   def application do
     [
       mod: { ExMemcached, [] },
-      applications: [:exlager, :ranch, :sasl],
+      applications: [:exlager, :ranch], # , :sasl],
       # application configuration goes here:
       env: [ ]
     ]

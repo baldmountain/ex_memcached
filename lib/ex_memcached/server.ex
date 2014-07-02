@@ -440,7 +440,7 @@ defmodule ExMemcached.Server do
             data_length <= Application.get_env(:ex_memcached, :max_data_size) ->
               A.set_cmd(loop_state, cmd, server_state)
             true ->
-              Lager.info "Object #{loop_state.key} too big for cache"
+              Lager.info "Object #{loop_state.key} too big for cache 1-> #{data_length}"
               ExMemcached.delete loop_state.key
               ServerState.send_data(server_state, <<"SERVER_ERROR object too large for cache\r\n">>)
           end
@@ -452,7 +452,7 @@ defmodule ExMemcached.Server do
                 data_length <= Application.get_env(:ex_memcached, :max_data_size) ->
                   A.set_cmd(loop_state, cmd, server_state)
                 true ->
-                  Lager.info "Object #{loop_state.key} too big for cache"
+                  Lager.info "Object #{loop_state.key} too big for cache 2-> #{data_length}"
                   ExMemcached.delete loop_state.key
                   ServerState.send_data(server_state, <<"SERVER_ERROR object too large for cache\r\n">>)
               end
@@ -466,14 +466,14 @@ defmodule ExMemcached.Server do
                 data_length <= Application.get_env(:ex_memcached, :max_data_size) ->
                   A.set_cmd(loop_state, cmd, server_state)
                 true ->
-                  Lager.info "Object #{loop_state.key} too big for cache"
+                  Lager.info "Object #{loop_state.key} too big for cache 3-> #{data_length}"
                   ExMemcached.delete loop_state.key
                   ServerState.send_data(server_state, <<"SERVER_ERROR object too large for cache\r\n">>)
               end
           end
           loop_state = %LoopState{}
         {:set, _} ->
-          Lager.info "Object #{loop_state.key} too big for cache"
+          Lager.info "Object #{loop_state.key} too big for cache 4-> #{cmd_size} < #{data_length} - #{String.slice(cmd, -10..-1)}"
           ExMemcached.delete loop_state.key
           ServerState.send_data(server_state, << "SERVER_ERROR object too large for cache\r\n" >>)
           loop_state = %LoopState{}
