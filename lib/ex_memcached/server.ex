@@ -25,14 +25,13 @@ defmodule ExMemcached.Server do
   		{:ok, data} ->
         data = server_state.existing_data <> data
         server_state = %ServerState{server_state | existing_data: ""}
-        if String.starts_with?(data, << Bd.protocol_binary_req >>) do
-          server_state = handle_binary_protocol(server_state, data)
-        else
-          if String.contains?(data, "\r\n") do
-            server_state = handle_ascii_protocol(server_state, data)
-          else
-            server_state = %ServerState{server_state | existing_data: server_state.existing_data <> data}
-          end
+        server_state = cond do
+          String.starts_with?(data, << Bd.protocol_binary_req >>) -> handle_binary_protocol(server_state, data)
+          true ->
+            cond do
+              String.contains?(data, "\r\n") -> handle_ascii_protocol(server_state, data)
+              true -> %ServerState{server_state | existing_data: server_state.existing_data <> data}
+            end
         end
   			loop(server_state)
   		_res ->
@@ -763,10 +762,7 @@ defmodule ExMemcached.Server do
     buf_len = expected + 2
     len = byte_size(data)
     cond do
-      len == buf_len -> String.slice(data, 0..-3)
-      len > buf_len ->
-        { String.slice(data, 0..buf_len-3), String.slice(data, buf_len..-1) }
-      true ->
+      len < buf_len ->
         case server_state.transport.recv(server_state.socket, buf_len - len, @receive_timeout) do
           {:ok, read} ->
             read_remainder_ascii(server_state, data <> read, expected)
@@ -775,6 +771,9 @@ defmodule ExMemcached.Server do
             :ok = ServerState.close_transport(server_state)
             nil
         end
+      2 == buf_len -> { <<>>, String.slice(data, buf_len..-1) }
+      len == buf_len -> String.slice(data, 0..-3)
+      len > buf_len -> { String.slice(data, 0..buf_len-3), String.slice(data, buf_len..-1) }
     end
   end
 

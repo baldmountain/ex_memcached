@@ -27,7 +27,7 @@ defmodule ExMemcached.Worker do
   end
 
   def init([]) do
-    Lager.info "Worker init"
+    Lager.info "Worker init - max size: #{Application.get_env(:ex_memcached, :max_data_size)}"
     { :ok, {HashDict.new, %WorkerState{}} }
   end
 
