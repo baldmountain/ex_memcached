@@ -391,10 +391,10 @@ defmodule ExMemcached.Server do
     {server_state, _} = Enum.reduce cmds, {server_state, %LoopState{} }, fn(cmd, {server_state, loop_state}) ->
       command = if (loop_state.state == :commands) do
         parts = String.split cmd, " "
-        # Lager.info ">>> #{inspect parts}"
+        Lager.info ">>> #{inspect parts}"
         List.first(parts)
       end
-      # for gurds
+      # for guards
       cmd_size = byte_size(cmd)
       data_length = loop_state.data_length
       case {loop_state.state, command} do
@@ -439,19 +439,19 @@ defmodule ExMemcached.Server do
             data_length <= Application.get_env(:ex_memcached, :max_data_size) ->
               A.set_cmd(loop_state, cmd, server_state)
             true ->
-              Lager.info "Object #{loop_state.key} too big for cache 1-> #{data_length}"
+              Lager.info "Object #{loop_state.key} too big for cache"
               ExMemcached.delete loop_state.key
               ServerState.send_data(server_state, <<"SERVER_ERROR object too large for cache\r\n">>)
           end
           loop_state = %LoopState{}
-        {:set, _} when cmd_size < data_length ->
+        {:set, _} ->
           case read_remainder_ascii(server_state, cmd, data_length) do
             {cmd, rest} ->
               cond do
                 data_length <= Application.get_env(:ex_memcached, :max_data_size) ->
                   A.set_cmd(loop_state, cmd, server_state)
                 true ->
-                  Lager.info "Object #{loop_state.key} too big for cache 2-> #{data_length}"
+                  Lager.info "Object #{loop_state.key} too big for cache"
                   ExMemcached.delete loop_state.key
                   ServerState.send_data(server_state, <<"SERVER_ERROR object too large for cache\r\n">>)
               end
@@ -465,16 +465,11 @@ defmodule ExMemcached.Server do
                 data_length <= Application.get_env(:ex_memcached, :max_data_size) ->
                   A.set_cmd(loop_state, cmd, server_state)
                 true ->
-                  Lager.info "Object #{loop_state.key} too big for cache 3-> #{data_length}"
+                  Lager.info "Object #{loop_state.key} too big for cache"
                   ExMemcached.delete loop_state.key
                   ServerState.send_data(server_state, <<"SERVER_ERROR object too large for cache\r\n">>)
               end
           end
-          loop_state = %LoopState{}
-        {:set, _} ->
-          Lager.info "Object #{loop_state.key} too big for cache 4-> #{cmd_size} < #{data_length} - #{String.slice(cmd, -10..-1)}"
-          ExMemcached.delete loop_state.key
-          ServerState.send_data(server_state, << "SERVER_ERROR object too large for cache\r\n" >>)
           loop_state = %LoopState{}
         {:commands, "add"} ->
           case parts do
@@ -747,6 +742,7 @@ defmodule ExMemcached.Server do
           loop_state = %LoopState{}
         {_, _} ->
           Lager.info "unknown command: #{cmd} in loop_state: #{inspect loop_state}"
+          dump_state server_state, loop_state
           A.send_error(server_state)
           # ServerState.close_transport(server_state)
           loop_state = %LoopState{}
@@ -835,5 +831,14 @@ defmodule ExMemcached.Server do
     value_len = byte_size(value)
     B.send_response_header(server_state, opcode, keylen, 0, 0, Bd.protocol_binray_response_success, keylen + value_len, opaque)
     ServerState.send_data(server_state, key <> value)
+  end
+
+  def dump_state server_state, nil do
+    Lager.info ">>> server_state: #{inspect server_state}"
+  end
+
+  def dump_state server_state, loop_state do
+    Lager.info ">>> server_state: #{inspect server_state}"
+    Lager.info ">>> loop_state: #{inspect loop_state}"
   end
 end
