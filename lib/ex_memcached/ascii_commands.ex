@@ -59,6 +59,10 @@ defmodule ExMemcached.AsciiCommands do
     ServerState.send_data(server_state, <<"CLIENT_ERROR flush_all not allowed\r\n">>)
   end
 
+  def send_ascii_reply :error, server_state do
+    ServerState.send_data(server_state, <<"SERVER_ERROR unknown error\r\n">>)
+  end
+
   def send_ascii_reply _, server_state do
     send_error(server_state)
   end

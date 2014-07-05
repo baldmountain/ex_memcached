@@ -45,6 +45,10 @@ defmodule ExMemcached.Worker do
     end
   end
 
+  def handle_call({:set, _key, nil, _flags, _exptime, cas}, _from, {data, work_state}) do
+    { :reply, :error, {data, work_state} }
+  end
+
   def handle_call({:set, key, value, flags, exptime, cas}, _from, {data, work_state}) do
     case cas do
       0 ->

@@ -8,7 +8,7 @@ defmodule ExMemcached.Server do
   alias ExMemcached.AsciiCommands.LoopState, as: LoopState
   alias ExMemcached.ServerState, as: ServerState
 
-  @receive_timeout 5000
+  @receive_timeout 120000
 
   def start_link(ref, socket, transport, opts) do
     pid = spawn_link(__MODULE__, :init, [ref, socket, transport, opts])
@@ -391,7 +391,7 @@ defmodule ExMemcached.Server do
     {server_state, _} = Enum.reduce cmds, {server_state, %LoopState{} }, fn(cmd, {server_state, loop_state}) ->
       command = if (loop_state.state == :commands) do
         parts = String.split cmd, " "
-        Lager.info ">>> #{inspect parts}"
+        # Lager.info ">>> #{inspect parts}"
         List.first(parts)
       end
       # for guards
@@ -416,7 +416,7 @@ defmodule ExMemcached.Server do
                   A.send_ascii_reply :bad_command_line, server_state
                   %LoopState{}
                 what, value ->
-                  Lager.info "3> Caught #{inspect what} with #{inspect value}"
+                  # Lager.info "3> Caught #{inspect what} with #{inspect value}"
                   %LoopState{}
               end
             [_, k, flags, exptime, data_length, nr] ->
@@ -427,7 +427,7 @@ defmodule ExMemcached.Server do
                   A.send_ascii_reply :bad_command_line, server_state
                   %LoopState{}
                 what, value ->
-                  Lager.info "4> Caught #{inspect what} with #{inspect value}"
+                  # Lager.info "4> Caught #{inspect what} with #{inspect value}"
                   %LoopState{}
               end
             _ ->
@@ -463,6 +463,7 @@ defmodule ExMemcached.Server do
             cmd ->
               cond do
                 data_length <= Application.get_env(:ex_memcached, :max_data_size) ->
+                  # Lager.info "setting key: #{loop_state.key} size: #{byte_size(cmd)}"
                   A.set_cmd(loop_state, cmd, server_state)
                 true ->
                   Lager.info "Object #{loop_state.key} too big for cache"
@@ -757,6 +758,7 @@ defmodule ExMemcached.Server do
   def read_remainder_ascii(server_state, data, expected) do
     buf_len = expected + 2
     len = byte_size(data)
+    # Lager.info "read_remainder_ascii data len: #{len} buf_len: #{buf_len}"
     cond do
       len < buf_len ->
         case server_state.transport.recv(server_state.socket, buf_len - len, @receive_timeout) do
@@ -767,9 +769,13 @@ defmodule ExMemcached.Server do
             :ok = ServerState.close_transport(server_state)
             nil
         end
-      2 == buf_len -> { <<>>, String.slice(data, buf_len..-1) }
-      len == buf_len -> String.slice(data, 0..-3)
-      len > buf_len -> { String.slice(data, 0..buf_len-3), String.slice(data, buf_len..-1) }
+      2 == buf_len -> { <<>>, binary_part(data, 2, len-2) }
+      len == buf_len ->
+        # binary_part data, 0, expected
+        << result::[binary, size(expected)], rest::binary >> = data
+        # Lager.info("read_remainder_ascii rest '#{rest}'")
+        result
+      len > buf_len -> { binary_part(data, 0, buf_len), binary_part(data, buf_len, len-buf_len) }
     end
   end
 

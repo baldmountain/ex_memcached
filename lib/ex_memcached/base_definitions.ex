@@ -112,4 +112,9 @@ defmodule ExMemcached.BaseDefinitions do
     end
   end
 
+  def get_binary_tail_piece data, start do
+    << rest::[binary, size(start)], result::binary >> = data
+    result
+  end
+
 end

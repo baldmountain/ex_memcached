@@ -70,7 +70,8 @@ defmodule ExMemcachedTest do
 
   def process_get response, socket do
     response = get_any_extra response, 28, socket
-    case String.slice(response, 0..27) do
+    <<data::[binary, size(28)], _>> = response
+    case data do
       << Bd.protocol_binary_res, Bd.protocol_binray_cmd_get, 0::size(16), 4, 0, Bd.protocol_binray_response_success::size(16), body_len::size(32), 0::size(32), cas::size(64), flags::size(32) >> ->
         data_len = body_len - 4
         # header + flags, response, anything else
@@ -86,7 +87,8 @@ defmodule ExMemcachedTest do
   end
 
   def process_getq response, result do
-    case String.slice(response, 0..23) do
+
+    case binary_part(response, 0, 24) do
       << Bd.protocol_binary_res, Bd.protocol_binray_cmd_getq, 0::size(16), 4, 0, Bd.protocol_binray_response_success::size(16), body_len::size(32), _opaque::size(32), _cas::size(64) >> ->
         data_len = body_len - 4
         # header + flags, response, value, anything else
@@ -128,20 +130,20 @@ defmodule ExMemcachedTest do
   def b_version socket do
     :ok = :gen_tcp.send(socket, <<Bd.protocol_binary_req, Bd.protocol_binray_cmd_version, 0::size(16), 0, 0, 0::size(16), 0::size(32), 0::size(32), 0::size(64)>>)
     {:ok, response} = :gen_tcp.recv(socket, 0)
-    << Bd.protocol_binary_res, Bd.protocol_binray_cmd_version, 0::size(16), 0, 0, Bd.protocol_binray_response_success::size(16), _body_len::size(32), 0::size(32), _cas::size(64) >> = String.slice(response, 0..23)
-    String.slice(response, 24..-1)
+    << Bd.protocol_binary_res, Bd.protocol_binray_cmd_version, 0::size(16), 0, 0, Bd.protocol_binray_response_success::size(16), _body_len::size(32), 0::size(32), _cas::size(64) >> = binary_part(response, 0, 24)
+    Bd.get_binary_tail_piece(response, 24)
   end
 
   def b_flush socket do
     :ok = :gen_tcp.send(socket, <<Bd.protocol_binary_req, Bd.protocol_binray_cmd_flush, 0::size(16), 4, 0, 0::size(16), 0::size(32), 0::size(32), 0::size(64), 0::size(32)>>)
     {:ok, response} = :gen_tcp.recv(socket, 0)
-    << Bd.protocol_binary_res, Bd.protocol_binray_cmd_flush, 0::size(16), 0, 0, Bd.protocol_binray_response_success::size(16), _body_len::size(32), 0::size(32), _cas::size(64) >> = String.slice(response, 0..23)
+    << Bd.protocol_binary_res, Bd.protocol_binray_cmd_flush, 0::size(16), 0, 0, Bd.protocol_binray_response_success::size(16), _body_len::size(32), 0::size(32), _cas::size(64) >> = binary_part(response, 0, 24)
   end
 
   def b_noop socket do
     :ok = :gen_tcp.send(socket, <<Bd.protocol_binary_req, Bd.protocol_binray_cmd_noop, 0::size(16), 4, 0, 0::size(16), 0::size(32), 0::size(32), 0::size(64), 0::size(32)>>)
     {:ok, response} = :gen_tcp.recv(socket, 24)
-    << Bd.protocol_binary_res, Bd.protocol_binray_cmd_noop, 0::size(16), 0, 0, Bd.protocol_binray_response_success::size(16), _body_len::size(32), 0::size(32), _cas::size(64) >> = String.slice(response, 0..23)
+    << Bd.protocol_binary_res, Bd.protocol_binray_cmd_noop, 0::size(16), 0, 0, Bd.protocol_binray_response_success::size(16), _body_len::size(32), 0::size(32), _cas::size(64) >> = binary_part(response, 0, 24)
   end
 
   def b_get_multi keys, socket do
