@@ -386,12 +386,12 @@ defmodule ExMemcached.Server do
   defp handle_ascii_protocol(server_state, data) do
     cmds = String.split data, "\r\n"
     if byte_size(List.last(cmds)) == 0, do: cmds = List.delete_at(cmds, -1)
-    # Lager.info "cmds: #{inspect cmds}"
+    Lager.info "cmds: #{inspect cmds}"
 
     {server_state, _} = Enum.reduce cmds, {server_state, %LoopState{} }, fn(cmd, {server_state, loop_state}) ->
       command = if (loop_state.state == :commands) do
         parts = String.split cmd, " "
-        # Lager.info ">>> #{inspect parts}"
+        Lager.info ">>> #{inspect parts}"
         List.first(parts)
       end
       # for guards
@@ -463,7 +463,7 @@ defmodule ExMemcached.Server do
             cmd ->
               cond do
                 data_length <= Application.get_env(:ex_memcached, :max_data_size) ->
-                  # Lager.info "setting key: #{loop_state.key} size: #{byte_size(cmd)}"
+                  Lager.info "setting key: #{loop_state.key} size: #{byte_size(cmd)}"
                   A.set_cmd(loop_state, cmd, server_state)
                 true ->
                   Lager.info "Object #{loop_state.key} too big for cache"
@@ -758,7 +758,7 @@ defmodule ExMemcached.Server do
   def read_remainder_ascii(server_state, data, expected) do
     buf_len = expected + 2
     len = byte_size(data)
-    # Lager.info "read_remainder_ascii data len: #{len} buf_len: #{buf_len}"
+    Lager.info "read_remainder_ascii data len: #{len} buf_len: #{buf_len}"
     cond do
       len < buf_len ->
         case server_state.transport.recv(server_state.socket, buf_len - len, @receive_timeout) do
@@ -773,7 +773,7 @@ defmodule ExMemcached.Server do
       len == buf_len ->
         # binary_part data, 0, expected
         << result::[binary, size(expected)], rest::binary >> = data
-        # Lager.info("read_remainder_ascii rest '#{rest}'")
+        Lager.info("read_remainder_ascii rest '#{rest}'")
         result
       len > buf_len -> { binary_part(data, 0, buf_len), binary_part(data, buf_len, len-buf_len) }
     end
