@@ -1,6 +1,6 @@
 defmodule ExMemcached.Worker do
   use GenServer
-  require Lager
+  require Logger
 
   defmodule WorkerState do
     defstruct get_misses: 0, get_hits: 0, allocated: 0, current_cas: 1
@@ -27,7 +27,7 @@ defmodule ExMemcached.Worker do
   end
 
   def init([]) do
-    Lager.info "Worker init - max size: #{Application.get_env(:ex_memcached, :max_data_size)}"
+    Logger.info "Worker init - max size: #{Application.get_env(:ex_memcached, :max_data_size)}"
     { :ok, {HashDict.new, %WorkerState{}} }
   end
 

@@ -1,7 +1,7 @@
 defmodule ExMemcached.AsciiCommands do
   require ExMemcached.BaseDefinitions
   alias ExMemcached.ServerState, as: ServerState
-  require Lager
+  require Logger
 
   defmodule LoopState do
     defstruct state: :commands, key: nil, flags: 0, exptime: 0, cas: 0, data_length: 0, no_reply: nil

@@ -1,6 +1,6 @@
 defmodule ExMemcached.Server do
   use GenServer
-  require Lager
+  require Logger
   require ExMemcached.BaseDefinitions
   alias ExMemcached.BaseDefinitions, as: Bd
   alias ExMemcached.BinaryCommands, as: B
@@ -46,9 +46,9 @@ defmodule ExMemcached.Server do
   defp handle_binary_protocol(server_state, data) do
     server_state = try do
       data = read_expected server_state, data, 24
-      << Bd.protocol_binary_req, opcode, keylen::[big, unsigned, integer, size(16)], extlen, datatype, reserved::[big, unsigned, integer, size(16)],
-        bodylen::[big, unsigned, integer, size(32)], opaque::[big, unsigned, integer, size(32)], cas::[big, unsigned, integer, size(64)], tail::binary >> = data
-        # Lager.info "#{Bd.opcode_description opcode} keylen #{keylen} extlen #{extlen} datatype #{datatype} reserved #{reserved} bodylen #{bodylen} opaque #{opaque} cas #{cas}"
+      << Bd.protocol_binary_req, opcode, keylen::big-unsigned-integer-size(16), extlen, datatype, reserved::big-unsigned-integer-size(16),
+        bodylen::big-unsigned-integer-size(32), opaque::big-unsigned-integer-size(32), cas::big-unsigned-integer-size(64), tail::binary >> = data
+        # Logger.info "#{Bd.opcode_description opcode} keylen #{keylen} extlen #{extlen} datatype #{datatype} reserved #{reserved} bodylen #{bodylen} opaque #{opaque} cas #{cas}"
 
       if keylen > 250 do
         B.send_error(server_state, opcode, opaque, Bd.protocol_binray_response_e2big)
@@ -67,7 +67,7 @@ defmodule ExMemcached.Server do
           Bd.protocol_binray_cmd_set when extlen == 8 ->
             tail = read_expected server_state, tail, extlen + keylen
             data_len = bodylen - extlen - keylen
-            << flags::size(32), exptime::size(32), key::[binary, size(keylen)], data::binary >> = tail
+            << flags::size(32), exptime::size(32), key::binary-size(keylen), data::binary >> = tail
             cond do
               data_len > Application.get_env(:ex_memcached, :max_data_size) ->
                 # delete if the key exists
@@ -89,7 +89,7 @@ defmodule ExMemcached.Server do
           Bd.protocol_binray_cmd_setq when extlen == 8 ->
             tail = read_expected server_state, tail, extlen + keylen
             data_len = bodylen - extlen - keylen
-            << flags::size(32), exptime::size(32), key::[binary, size(keylen)], data::binary >> = tail
+            << flags::size(32), exptime::size(32), key::binary-size(keylen), data::binary >> = tail
             cond do
               data_len > Application.get_env(:ex_memcached, :max_data_size) ->
                 # delete if the key exists
@@ -111,7 +111,7 @@ defmodule ExMemcached.Server do
           Bd.protocol_binray_cmd_add ->
             tail = read_expected server_state, tail, extlen + keylen
             data_len = bodylen - extlen - keylen
-            << flags::size(32), exptime::size(32), key::[binary, size(keylen)], data::binary >> = tail
+            << flags::size(32), exptime::size(32), key::binary-size(keylen), data::binary >> = tail
             cond do
               data_len > Application.get_env(:ex_memcached, :max_data_size) ->
                 # delete if the key exists
@@ -135,7 +135,7 @@ defmodule ExMemcached.Server do
           Bd.protocol_binray_cmd_addq ->
             tail = read_expected server_state, tail, extlen + keylen
             data_len = bodylen - extlen - keylen
-            << flags::size(32), exptime::size(32), key::[binary, size(keylen)], data::binary >> = tail
+            << flags::size(32), exptime::size(32), key::binary-size(keylen), data::binary >> = tail
             cond do
               data_len > Application.get_env(:ex_memcached, :max_data_size) ->
                 # delete if the key exists
@@ -157,7 +157,7 @@ defmodule ExMemcached.Server do
           Bd.protocol_binray_cmd_replace ->
             tail = read_expected server_state, tail, extlen + keylen
             data_len = bodylen - extlen - keylen
-            << flags::size(32), exptime::size(32), key::[binary, size(keylen)], data::binary >> = tail
+            << flags::size(32), exptime::size(32), key::binary-size(keylen), data::binary >> = tail
             cond do
               data_len > Application.get_env(:ex_memcached, :max_data_size) ->
                 # delete if the key exists
@@ -179,7 +179,7 @@ defmodule ExMemcached.Server do
           Bd.protocol_binray_cmd_replaceq ->
             tail = read_expected server_state, tail, extlen + keylen
             data_len = bodylen - extlen - keylen
-            << flags::size(32), exptime::size(32), key::[binary, size(keylen)], data::binary >> = tail
+            << flags::size(32), exptime::size(32), key::binary-size(keylen), data::binary >> = tail
             cond do
               data_len > Application.get_env(:ex_memcached, :max_data_size) ->
                 # delete if the key exists
@@ -228,22 +228,22 @@ defmodule ExMemcached.Server do
             server_state = handle_binary_protocol(server_state, data)
           Bd.protocol_binray_cmd_increment ->
             tail = read_expected server_state, tail, extlen + keylen
-            << count::[unsigned, size(64)], intial::size(64), expiration::[unsigned, integer, size(32)], key::[binary, size(keylen)], data::binary >> = tail
+            << count::unsigned-size(64), intial::size(64), expiration::unsigned-integer-size(32), key::binary-size(keylen), data::binary >> = tail
             server_state = B.binary_incr_cmd(key, count, intial, expiration, opcode, opaque, server_state)
             server_state = handle_binary_protocol(server_state, data)
           Bd.protocol_binray_cmd_incrementq ->
             tail = read_expected server_state, tail, extlen + keylen
-            << count::size(64), intial::size(64), expiration::[unsigned, integer, size(32)], key::[binary, size(keylen)], data::binary >> = tail
+            << count::size(64), intial::size(64), expiration::unsigned-integer-size(32), key::binary-size(keylen), data::binary >> = tail
             server_state = B.binary_incrq_cmd(key, count, intial, expiration, opcode, opaque, server_state)
             server_state = handle_binary_protocol(server_state, data)
           Bd.protocol_binray_cmd_decrement ->
             tail = read_expected server_state, tail, extlen + keylen
-            << count::size(64), intial::size(64), expiration::[unsigned, integer, size(32)], key::[binary, size(keylen)], data::binary >> = tail
+            << count::size(64), intial::size(64), expiration::unsigned-integer-size(32), key::binary-size(keylen), data::binary >> = tail
             server_state = B.binary_decr_cmd(key, count, intial, expiration, opcode, opaque, server_state)
             server_state = handle_binary_protocol(server_state, data)
           Bd.protocol_binray_cmd_decrementq ->
             tail = read_expected server_state, tail, extlen + keylen
-            << count::size(64), intial::size(64), expiration::[unsigned, integer, size(32)], key::[binary, size(keylen)], data::binary >> = tail
+            << count::size(64), intial::size(64), expiration::unsigned-integer-size(32), key::binary-size(keylen), data::binary >> = tail
             server_state = B.binary_decrq_cmd(key, count, intial, expiration, opcode, opaque, server_state)
             server_state = handle_binary_protocol(server_state, data)
           Bd.protocol_binray_cmd_version ->
@@ -308,12 +308,12 @@ defmodule ExMemcached.Server do
             end
           Bd.protocol_binray_cmd_touch ->
             tail = read_expected server_state, tail, extlen + keylen
-            << exptime::size(32), key::[binary, size(keylen)], data::binary >> = tail
+            << exptime::size(32), key::binary-size(keylen), data::binary >> = tail
             server_state = B.binary_touch_cmd(key, exptime, opcode, opaque, server_state)
             server_state = handle_binary_protocol(server_state, data)
           Bd.protocol_binray_cmd_gat ->
             tail = read_expected server_state, tail, extlen + keylen
-            << exptime::size(32), key::[binary, size(keylen)], data::binary >> = tail
+            << exptime::size(32), key::binary-size(keylen), data::binary >> = tail
             server_state = B.binary_gat_cmd(key, exptime, opcode, opaque, server_state)
             server_state = handle_binary_protocol(server_state, data)
           Bd.protocol_binray_cmd_stat ->
@@ -349,7 +349,7 @@ defmodule ExMemcached.Server do
               end
             server_state = handle_binary_protocol(server_state, data)
           _ ->
-            Lager.info "Unknown opcode: #{opcode}"
+            Logger.info "Unknown opcode: #{opcode}"
             {_key, data} = key_data(extlen, keylen, tail)
             B.send_response_header(server_state, opcode, 0, 0, 0, Bd.protocol_binray_response_unknown_command, 0, opaque)
             server_state = handle_binary_protocol(server_state, data)
@@ -358,25 +358,25 @@ defmodule ExMemcached.Server do
       server_state
     catch
       :error, :badmatch ->
-        Lager.info "Badmatch on input command"
+        Logger.info "Badmatch on input command"
         << _magic, opcode, _tail::binary >> = data
         B.send_response_header(server_state, opcode, 0, 0, 0, Bd.protocol_binray_response_einval, 0, 0)
       :exit, value ->
-        Lager.info "exit called with #{inspect value}"
+        Logger.info "exit called with #{inspect value}"
         server_state
       :throw, value ->
-        Lager.info "Throw called with #{inspect value}"
+        Logger.info "Throw called with #{inspect value}"
         server_state
       what, value ->
-        Lager.info "1> Caught #{what} with #{inspect value}"
+        Logger.info "1> Caught #{what} with #{inspect value}"
         try do
-          << _magic, opcode, _keylen::[big, unsigned, integer, size(16)], _extlen, _datatype, _reserved::[big, unsigned, integer, size(16)],
-            _bodylen::[big, unsigned, integer, size(32)], opaque::[big, unsigned, integer, size(32)], _tail::binary >> = data
+          << _magic, opcode, _keylen::big-unsigned-integer-size(16), _extlen, _datatype, _reserved::big-unsigned-integer-size(16),
+            _bodylen::big-unsigned-integer-size(32), opaque::big-unsigned-integer-size(32), _tail::binary >> = data
           B.send_response_header(server_state, opcode, 0, 0, 0, Bd.protocol_binray_response_einval, 0, opaque)
           server_state
         catch
           what, value ->
-            Lager.info "2> Caught secondary #{inspect what} with #{inspect value}"
+            Logger.info "2> Caught secondary #{inspect what} with #{inspect value}"
             server_state
         end
     end
@@ -386,12 +386,12 @@ defmodule ExMemcached.Server do
   defp handle_ascii_protocol(server_state, data) do
     cmds = String.split data, "\r\n"
     if byte_size(List.last(cmds)) == 0, do: cmds = List.delete_at(cmds, -1)
-    # Lager.info "cmds: #{inspect cmds}"
+    # Logger.info "cmds: #{inspect cmds}"
 
     {server_state, _} = Enum.reduce cmds, {server_state, %LoopState{} }, fn(cmd, {server_state, loop_state}) ->
       command = if (loop_state.state == :commands) do
         parts = String.split cmd, " "
-        # Lager.info ">>> #{inspect parts}"
+        # Logger.info ">>> #{inspect parts}"
         List.first(parts)
       end
       # for guards
@@ -416,7 +416,7 @@ defmodule ExMemcached.Server do
                   A.send_ascii_reply :bad_command_line, server_state
                   %LoopState{}
                 what, value ->
-                  # Lager.info "3> Caught #{inspect what} with #{inspect value}"
+                  # Logger.info "3> Caught #{inspect what} with #{inspect value}"
                   %LoopState{}
               end
             [_, k, flags, exptime, data_length, nr] ->
@@ -427,7 +427,7 @@ defmodule ExMemcached.Server do
                   A.send_ascii_reply :bad_command_line, server_state
                   %LoopState{}
                 what, value ->
-                  # Lager.info "4> Caught #{inspect what} with #{inspect value}"
+                  # Logger.info "4> Caught #{inspect what} with #{inspect value}"
                   %LoopState{}
               end
             _ ->
@@ -439,7 +439,7 @@ defmodule ExMemcached.Server do
             data_length <= Application.get_env(:ex_memcached, :max_data_size) ->
               A.set_cmd(loop_state, cmd, server_state)
             true ->
-              Lager.info "Object #{loop_state.key} too big for cache"
+              Logger.info "Object #{loop_state.key} too big for cache"
               ExMemcached.delete loop_state.key
               ServerState.send_data(server_state, <<"SERVER_ERROR object too large for cache\r\n">>)
           end
@@ -451,7 +451,7 @@ defmodule ExMemcached.Server do
                 data_length <= Application.get_env(:ex_memcached, :max_data_size) ->
                   A.set_cmd(loop_state, cmd, server_state)
                 true ->
-                  Lager.info "Object #{loop_state.key} too big for cache"
+                  Logger.info "Object #{loop_state.key} too big for cache"
                   ExMemcached.delete loop_state.key
                   ServerState.send_data(server_state, <<"SERVER_ERROR object too large for cache\r\n">>)
               end
@@ -463,10 +463,10 @@ defmodule ExMemcached.Server do
             cmd ->
               cond do
                 data_length <= Application.get_env(:ex_memcached, :max_data_size) ->
-                  # Lager.info "setting key: #{loop_state.key} size: #{byte_size(cmd)}"
+                  # Logger.info "setting key: #{loop_state.key} size: #{byte_size(cmd)}"
                   A.set_cmd(loop_state, cmd, server_state)
                 true ->
-                  Lager.info "Object #{loop_state.key} too big for cache"
+                  Logger.info "Object #{loop_state.key} too big for cache"
                   ExMemcached.delete loop_state.key
                   ServerState.send_data(server_state, <<"SERVER_ERROR object too large for cache\r\n">>)
               end
@@ -482,7 +482,7 @@ defmodule ExMemcached.Server do
                   A.send_ascii_reply :bad_command_line, server_state
                   %LoopState{}
                 what, value ->
-                  Lager.info "5> Caught #{inspect what} with #{inspect value}"
+                  Logger.info "5> Caught #{inspect what} with #{inspect value}"
                   %LoopState{}
               end
             [_, k, flags, exptime, data_length, nr] ->
@@ -493,7 +493,7 @@ defmodule ExMemcached.Server do
                   A.send_ascii_reply :bad_command_line, server_state
                   %LoopState{}
                 what, value ->
-                  Lager.info "6> Caught #{inspect what} with #{inspect value}"
+                  Logger.info "6> Caught #{inspect what} with #{inspect value}"
                   %LoopState{}
               end
             _ ->
@@ -516,7 +516,7 @@ defmodule ExMemcached.Server do
           end
           loop_state = %LoopState{}
         {:add, _} ->
-          Lager.info "bad data length"
+          Logger.info "bad data length"
           A.send_error(server_state)
           loop_state = %LoopState{}
         {:commands, "replace"} ->
@@ -529,7 +529,7 @@ defmodule ExMemcached.Server do
                   A.send_ascii_reply :bad_command_line, server_state
                   %LoopState{}
                 what, value ->
-                  Lager.info "7> Caught #{inspect what} with #{inspect value}"
+                  Logger.info "7> Caught #{inspect what} with #{inspect value}"
                   %LoopState{}
               end
             [_, k, flags, exptime, data_length, nr] ->
@@ -540,7 +540,7 @@ defmodule ExMemcached.Server do
                   A.send_ascii_reply :bad_command_line, server_state
                   %LoopState{}
                 what, value ->
-                  Lager.info "8> Caught #{inspect what} with #{inspect value}"
+                  Logger.info "8> Caught #{inspect what} with #{inspect value}"
                   %LoopState{}
               end
             _ ->
@@ -563,7 +563,7 @@ defmodule ExMemcached.Server do
           end
           loop_state = %LoopState{}
         {:replace, _} ->
-          Lager.info "bad data length"
+          Logger.info "bad data length"
           A.send_error(server_state)
           loop_state = %LoopState{}
         {:commands, "append"} ->
@@ -576,7 +576,7 @@ defmodule ExMemcached.Server do
                   A.send_ascii_reply :bad_command_line, server_state
                   %LoopState{}
                 what, value ->
-                  Lager.info "9> Caught #{inspect what} with #{inspect value}"
+                  Logger.info "9> Caught #{inspect what} with #{inspect value}"
                   %LoopState{}
               end
             [_, k, flags, exptime, data_length, nr] ->
@@ -587,7 +587,7 @@ defmodule ExMemcached.Server do
                   A.send_ascii_reply :bad_command_line, server_state
                   %LoopState{}
                 what, value ->
-                  Lager.info "10> Caught #{inspect what} with #{inspect value}"
+                  Logger.info "10> Caught #{inspect what} with #{inspect value}"
                   %LoopState{}
               end
             _ ->
@@ -610,7 +610,7 @@ defmodule ExMemcached.Server do
           end
           loop_state = %LoopState{}
         {:append, _} ->
-          Lager.info "bad data length"
+          Logger.info "bad data length"
           A.send_error(server_state)
           loop_state = %LoopState{}
         {:commands, "prepend"} ->
@@ -623,7 +623,7 @@ defmodule ExMemcached.Server do
                   A.send_ascii_reply :bad_command_line, server_state
                   %LoopState{}
                 what, value ->
-                  Lager.info "11> Caught #{inspect what} with #{inspect value}"
+                  Logger.info "11> Caught #{inspect what} with #{inspect value}"
                   %LoopState{}
               end
             [_, k, flags, exptime, data_length, nr] ->
@@ -634,7 +634,7 @@ defmodule ExMemcached.Server do
                   A.send_ascii_reply :bad_command_line, server_state
                   %LoopState{}
                 what, value ->
-                  Lager.info "12> Caught #{inspect what} with #{inspect value}"
+                  Logger.info "12> Caught #{inspect what} with #{inspect value}"
                   %LoopState{}
               end
             _ ->
@@ -657,7 +657,7 @@ defmodule ExMemcached.Server do
           end
           loop_state = %LoopState{}
         {:prepend, _} ->
-          Lager.info "bad data length"
+          Logger.info "bad data length"
           A.send_error(server_state)
           loop_state = %LoopState{}
         {:commands, "cas"} ->
@@ -670,7 +670,7 @@ defmodule ExMemcached.Server do
                   A.send_ascii_reply :bad_command_line, server_state
                   %LoopState{}
                 what, value ->
-                  Lager.info "13> Caught #{inspect what} with #{inspect value}"
+                  Logger.info "13> Caught #{inspect what} with #{inspect value}"
                   %LoopState{}
               end
             [_, k, flags, exptime, data_length, cas, nr] when byte_size(cas) > 0->
@@ -681,7 +681,7 @@ defmodule ExMemcached.Server do
                   A.send_ascii_reply :bad_command_line, server_state
                   %LoopState{}
                 what, value ->
-                  Lager.info "14> Caught #{inspect what} with #{inspect value}"
+                  Logger.info "14> Caught #{inspect what} with #{inspect value}"
                   %LoopState{}
               end
             _ ->
@@ -704,7 +704,7 @@ defmodule ExMemcached.Server do
           end
           loop_state = %LoopState{}
         {:cas, _} ->
-          Lager.info "bad data length"
+          Logger.info "bad data length"
           A.send_error(server_state)
           loop_state = %LoopState{}
         {:commands, "delete"} ->
@@ -742,16 +742,16 @@ defmodule ExMemcached.Server do
           # blank so just skip to next one
           loop_state = %LoopState{}
         {_, _} ->
-          Lager.info "unknown command: #{cmd} in loop_state: #{inspect loop_state}"
+          Logger.info "unknown command: #{cmd} in loop_state: #{inspect loop_state}"
           dump_state server_state, loop_state
           A.send_error(server_state)
           # ServerState.close_transport(server_state)
           loop_state = %LoopState{}
       end
-      # Lager.info ">>> loop_state: #{inspect loop_state}"
+      # Logger.info ">>> loop_state: #{inspect loop_state}"
       { server_state, loop_state }
     end
-    # Lager.info ">>> server_state: #{inspect server_state}"
+    # Logger.info ">>> server_state: #{inspect server_state}"
     server_state
   end
 
@@ -759,10 +759,10 @@ defmodule ExMemcached.Server do
     buf_len = expected + 2
     len = byte_size(data)
     remaining = buf_len - len
-    # Lager.info "read_remainder_ascii data len: #{len} buf_len: #{buf_len}"
+    # Logger.info "read_remainder_ascii data len: #{len} buf_len: #{buf_len}"
     cond do
       remaining < 0 ->
-        << result::[binary, size(expected)], crlf::[binary, size(2)], rest::binary >> = data
+        << result::binary-size(expected), crlf::binary-size(2), rest::binary >> = data
         # :io.format("read_remainder_ascii crlf '~w'~n", [crlf])
         {result, rest}
       remaining > 0 ->
@@ -772,7 +772,7 @@ defmodule ExMemcached.Server do
               {:ok, read} ->
                 read_remainder_ascii(server_state, data <> read, expected)
               res ->
-                Lager.info "read_remainder_ascii res: #{inspect res}"
+                Logger.info "read_remainder_ascii res: #{inspect res}"
                 :ok = ServerState.close_transport(server_state)
                 nil
             end
@@ -781,7 +781,7 @@ defmodule ExMemcached.Server do
               {:ok, read} ->
                 read_remainder_ascii(server_state, data <> read, expected)
               res ->
-                Lager.info "read_remainder_ascii res: #{inspect res}"
+                Logger.info "read_remainder_ascii res: #{inspect res}"
                 :ok = ServerState.close_transport(server_state)
                 nil
             end
@@ -789,7 +789,7 @@ defmodule ExMemcached.Server do
       2 == buf_len -> { <<>>, binary_part(data, 2, len-2) }
       remaining == 0 ->
         # binary_part data, 0, expected
-        << result::[binary, size(expected)], rest::binary >> = data
+        << result::binary-size(expected), rest::binary >> = data
         # :io.format("read_remainder_ascii rest '~w'~n", [binary_part(data, buf_len, -100)])
         result
       len > buf_len -> { binary_part(data, 0, buf_len), binary_part(data, buf_len, len-buf_len) }
@@ -801,14 +801,14 @@ defmodule ExMemcached.Server do
     cond do
       len == expected -> data
       len > expected ->
-        <<data::[binary, size(expected)], rest::binary >> = data
+        <<data::binary-size(expected), rest::binary >> = data
         {data, rest}
       true ->
         case server_state.transport.recv(server_state.socket, expected - len, @receive_timeout) do
           {:ok, read} ->
             read_remainder(server_state, data <> read, expected)
           res ->
-            Lager.info "read_remainder res: #{inspect res}"
+            Logger.info "read_remainder res: #{inspect res}"
             :ok = ServerState.close_transport(server_state)
             nil
         end
@@ -823,7 +823,7 @@ defmodule ExMemcached.Server do
         {:ok, read} ->
           data <> read
         res ->
-          Lager.info "read_expected res: #{inspect res}"
+          Logger.info "read_expected res: #{inspect res}"
           :ok = ServerState.close_transport(server_state)
           nil
       end
@@ -833,10 +833,10 @@ defmodule ExMemcached.Server do
 
   defp key_data(extlen, keylen, buffer) do
     case extlen do
-      0 -> << key::[binary, size(keylen)], data::binary >> = buffer
+      0 -> << key::binary-size(keylen), data::binary >> = buffer
       _ ->
         extlen = extlen * 8
-        << _::size(extlen), key::[binary, size(keylen)], data::binary >> = buffer
+        << _::size(extlen), key::binary-size(keylen), data::binary >> = buffer
     end
     {key, data}
   end
@@ -857,11 +857,11 @@ defmodule ExMemcached.Server do
   end
 
   def dump_state server_state, nil do
-    Lager.info ">>> server_state: #{inspect server_state}"
+    Logger.info ">>> server_state: #{inspect server_state}"
   end
 
   def dump_state server_state, loop_state do
-    Lager.info ">>> server_state: #{inspect server_state}"
-    Lager.info ">>> loop_state: #{inspect loop_state}"
+    Logger.info ">>> server_state: #{inspect server_state}"
+    Logger.info ">>> loop_state: #{inspect loop_state}"
   end
 end

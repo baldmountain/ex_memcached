@@ -8,6 +8,6 @@ There is still a lot to do before trying to use this in a production environment
 
 I've run ExMemcahced against memslap and memcachetest and they run without error. Just not very fast.
 
-ExMemcached uses ranch for the tcp server, xgen for some OTP stuff, ExLager for logging and exrm for builds.
+ExMemcached uses ranch for the tcp server.
 
 The license is the MIT license
