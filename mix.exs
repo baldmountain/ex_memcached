@@ -4,7 +4,7 @@ defmodule ExMemcached.Mixfile do
   def project do
     [ app: :ex_memcached,
       version: "0.0.1",
-      elixir: "> 0.14.1",
+      elixir: "~> 1.0.0",
       deps: deps]
       # elixirc_options: options(Mix.env) ]
   end

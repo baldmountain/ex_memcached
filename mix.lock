@@ -1,3 +1,3 @@
-%{"conform": {:package, "0.10.2"},
-  "exrm": {:git, "git://github.com/bitwalker/exrm.git", "3abc6a6553412ea1ffe4631416f6778c340278bc", []},
+%{"conform": {:package, "0.10.3"},
+  "exrm": {:git, "git://github.com/bitwalker/exrm.git", "8838224b673feca4fc91fac766b0aa8cc2a220cb", []},
   "ranch": {:git, "git://github.com/extend/ranch.git", "adf1822defc2b7cfdc7aca112adabfa1d614043c", []}}
