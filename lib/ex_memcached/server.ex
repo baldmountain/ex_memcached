@@ -59,7 +59,7 @@ defmodule ExMemcached.Server do
             server_state = B.send_stored_responses server_state
             server_state = B.send_response_header(server_state, opcode, 0, 0, 0, Bd.protocol_binray_response_success, 0, opaque)
           Bd.protocol_binray_cmd_quit ->
-            server_state = B.send_stored_responses
+            server_state = B.send_stored_responses server_state
             server_state = B.send_response_header(server_state, opcode, 0, 0, 0, Bd.protocol_binray_response_success, 0, opaque)
             ServerState.close_transport(server_state)
           Bd.protocol_binray_cmd_quitq ->

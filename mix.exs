@@ -3,8 +3,8 @@ defmodule ExMemcached.Mixfile do
 
   def project do
     [ app: :ex_memcached,
-      version: "0.0.1",
-      elixir: "~> 1.0.0",
+      version: "0.0.2",
+      elixir: "~> 1.3.0",
       deps: deps]
       # elixirc_options: options(Mix.env) ]
   end
@@ -26,8 +26,8 @@ defmodule ExMemcached.Mixfile do
   # { :barbat, "~> 0.1", github: "elixir-lang/barbat" }
   defp deps do
     [
-      { :ranch, github: "extend/ranch" },
-      {:exrm, github: "bitwalker/exrm"}
+      { :ranch, "~> 1.2.1" },
+      {:exrm, "~> 1.0.8"}
     ]
   end
 
