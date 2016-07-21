@@ -48,7 +48,7 @@ defmodule ExMemcached.Server do
       data = read_expected server_state, data, 24
       << Bd.protocol_binary_req, opcode, keylen::big-unsigned-integer-size(16), extlen, datatype, reserved::big-unsigned-integer-size(16),
         bodylen::big-unsigned-integer-size(32), opaque::big-unsigned-integer-size(32), cas::big-unsigned-integer-size(64), tail::binary >> = data
-        # Logger.info "#{Bd.opcode_description opcode} keylen #{keylen} extlen #{extlen} datatype #{datatype} reserved #{reserved} bodylen #{bodylen} opaque #{opaque} cas #{cas}"
+        Logger.info "#{Bd.opcode_description opcode} keylen #{keylen} extlen #{extlen} datatype #{datatype} reserved #{reserved} bodylen #{bodylen} opaque #{opaque} cas #{cas}"
 
       if keylen > 250 do
         B.send_error(server_state, opcode, opaque, Bd.protocol_binray_response_e2big)
@@ -401,11 +401,11 @@ defmodule ExMemcached.Server do
         {:commands, "get"} ->
           [_|tail] = parts
           A.get_cmd(tail, server_state)
-          loop_state = %LoopState{}
+          { server_state, %LoopState{} }
         {:commands, "gets"} ->
           [_|tail] = parts
           A.gets_cmd(tail, server_state)
-          loop_state = %LoopState{}
+          { server_state, %LoopState{} }
         {:commands, "set"} ->
           case parts do
             [_, k, flags, exptime, data_length] ->
@@ -416,7 +416,7 @@ defmodule ExMemcached.Server do
                   A.send_ascii_reply :bad_command_line, server_state
                   %LoopState{}
                 what, value ->
-                  # Logger.info "3> Caught #{inspect what} with #{inspect value}"
+                  Logger.info "3> Caught #{inspect what} with #{inspect value}"
                   %LoopState{}
               end
             [_, k, flags, exptime, data_length, nr] ->
@@ -427,13 +427,14 @@ defmodule ExMemcached.Server do
                   A.send_ascii_reply :bad_command_line, server_state
                   %LoopState{}
                 what, value ->
-                  # Logger.info "4> Caught #{inspect what} with #{inspect value}"
+                  Logger.info "4> Caught #{inspect what} with #{inspect value}"
                   %LoopState{}
               end
             _ ->
               A.send_error(server_state)
               loop_state = %LoopState{}
           end
+          { server_state, loop_state }
         {:set, _} when cmd_size == data_length ->
           cond do
             data_length <= Application.get_env(:ex_memcached, :max_data_size) ->
@@ -443,7 +444,7 @@ defmodule ExMemcached.Server do
               ExMemcached.delete loop_state.key
               ServerState.send_data(server_state, <<"SERVER_ERROR object too large for cache\r\n">>)
           end
-          loop_state = %LoopState{}
+          { server_state, %LoopState{} }
         {:set, _} ->
           case read_remainder_ascii(server_state, cmd, data_length) do
             {cmd, rest} ->
@@ -471,7 +472,7 @@ defmodule ExMemcached.Server do
                   ServerState.send_data(server_state, <<"SERVER_ERROR object too large for cache\r\n">>)
               end
           end
-          loop_state = %LoopState{}
+          { server_state, %LoopState{} }
         {:commands, "add"} ->
           case parts do
             [_, k, flags, exptime, data_length] ->
@@ -500,9 +501,10 @@ defmodule ExMemcached.Server do
               A.send_error(server_state)
               loop_state = %LoopState{}
           end
+          { server_state, loop_state }
         {:add, _} when cmd_size == data_length ->
           A.add_cmd(loop_state, cmd, server_state)
-          loop_state = %LoopState{}
+          { server_state, %LoopState{} }
         {:add, _} when cmd_size < data_length ->
           case read_remainder_ascii(server_state, cmd, data_length) do
             {cmd, rest} ->
@@ -514,11 +516,11 @@ defmodule ExMemcached.Server do
             cmd ->
               A.add_cmd(loop_state, cmd, server_state)
           end
-          loop_state = %LoopState{}
+          { server_state, %LoopState{} }
         {:add, _} ->
           Logger.info "bad data length"
           A.send_error(server_state)
-          loop_state = %LoopState{}
+          { server_state, %LoopState{} }
         {:commands, "replace"} ->
           case parts do
             [_, k, flags, exptime, data_length] ->
@@ -547,9 +549,10 @@ defmodule ExMemcached.Server do
               A.send_error(server_state)
               loop_state = %LoopState{}
           end
+          { server_state, loop_state }
         {:replace, _} when cmd_size == data_length ->
           A.replace_cmd(loop_state, cmd, server_state)
-          loop_state = %LoopState{}
+          { server_state, %LoopState{} }
         {:replace, _} when cmd_size < data_length ->
           case read_remainder_ascii(server_state, cmd, data_length) do
             {cmd, rest} ->
@@ -561,11 +564,11 @@ defmodule ExMemcached.Server do
             cmd
               A.replace_cmd(loop_state, cmd, server_state)
           end
-          loop_state = %LoopState{}
+          { server_state, %LoopState{} }
         {:replace, _} ->
           Logger.info "bad data length"
           A.send_error(server_state)
-          loop_state = %LoopState{}
+          { server_state, %LoopState{} }
         {:commands, "append"} ->
           case parts do
             [_, k, flags, exptime, data_length] ->
@@ -596,7 +599,7 @@ defmodule ExMemcached.Server do
           end
         {:append, _} when cmd_size == data_length ->
           A.append_cmd(loop_state, cmd, server_state)
-          loop_state = %LoopState{}
+          { server_state, %LoopState{} }
         {:append, _} when cmd_size < data_length ->
           case read_remainder_ascii(server_state, cmd, data_length) do
             {cmd, rest} ->
@@ -608,11 +611,11 @@ defmodule ExMemcached.Server do
             cmd ->
               A.append_cmd(loop_state, cmd, server_state)
           end
-          loop_state = %LoopState{}
+          { server_state, %LoopState{} }
         {:append, _} ->
           Logger.info "bad data length"
           A.send_error(server_state)
-          loop_state = %LoopState{}
+          { server_state, %LoopState{} }
         {:commands, "prepend"} ->
           case parts do
             [_, k, flags, exptime, data_length] ->
@@ -641,9 +644,10 @@ defmodule ExMemcached.Server do
               A.send_error(server_state)
               loop_state = %LoopState{}
           end
+          { server_state, loop_state }
         {:prepend, _} when cmd_size == data_length ->
           A.prepend_cmd(loop_state, cmd, server_state)
-          loop_state = %LoopState{}
+          { server_state, %LoopState{} }
         {:prepend, _} when cmd_size < data_length ->
           case read_remainder_ascii(server_state, cmd, data_length) do
             {cmd, rest} ->
@@ -655,11 +659,11 @@ defmodule ExMemcached.Server do
             cmd ->
               A.prepend_cmd(loop_state, cmd, server_state)
           end
-          loop_state = %LoopState{}
+          { server_state, %LoopState{} }
         {:prepend, _} ->
           Logger.info "bad data length"
           A.send_error(server_state)
-          loop_state = %LoopState{}
+          { server_state, %LoopState{} }
         {:commands, "cas"} ->
           case parts do
             [_, k, flags, exptime, data_length, cas] when byte_size(cas) > 0->
@@ -688,9 +692,10 @@ defmodule ExMemcached.Server do
               A.send_error(server_state)
               loop_state = %LoopState{loop_state | state: :commands}
           end
+          { server_state, loop_state }
         {:cas, _} when cmd_size == data_length ->
           A.cas_cmd(loop_state, cmd, server_state)
-          loop_state = %LoopState{}
+          { server_state, %LoopState{} }
         {:cas, _} when cmd_size < data_length ->
           case read_remainder_ascii(server_state, cmd, data_length) do
             {cmd, rest} ->
@@ -702,54 +707,53 @@ defmodule ExMemcached.Server do
             cmd ->
               A.cas_cmd(loop_state, cmd, server_state)
           end
-          loop_state = %LoopState{}
+          { server_state, %LoopState{} }
         {:cas, _} ->
           Logger.info "bad data length"
           A.send_error(server_state)
-          loop_state = %LoopState{}
+          { server_state, %LoopState{} }
         {:commands, "delete"} ->
           [_|tail] = parts
           A.delete_cmd(tail, server_state)
-          loop_state = %LoopState{}
+          { server_state, %LoopState{} }
         {:commands, "incr"} ->
           [_|tail] = parts
           A.incr_cmd(tail, server_state)
-          loop_state = %LoopState{}
+          { server_state, %LoopState{} }
         {:commands, "decr"} ->
           [_|tail] = parts
           A.decr_cmd(tail, server_state)
-          loop_state = %LoopState{}
+          { server_state, %LoopState{} }
         {:commands, "touch"} ->
           [_|tail] = parts
           A.touch_cmd(tail, server_state)
-          loop_state = %LoopState{}
+          { server_state, %LoopState{} }
         {:commands, "flush_all"} ->
           [_|tail] = parts
           A.flush_all_cmd(tail, server_state)
-          loop_state = %LoopState{}
+          { server_state, %LoopState{} }
         {:commands, "stats"} ->
           A.stats_cmd(parts, server_state)
+          { server_state, %LoopState{} }
         {:commands, "verbosity"} ->
           A.verbosity_cmd(parts, server_state)
-          loop_state = %LoopState{}
+          { server_state, %LoopState{} }
         {:commands, "shutdown"} ->
           ServerState.close_transport(server_state)
-          loop_state = %LoopState{}
+          { server_state, %LoopState{} }
         {:commands, "quit"} ->
           ServerState.close_transport(server_state)
-          loop_state = %LoopState{}
+          { server_state, %LoopState{} }
         {:commands, << >>} when cmd_size == 0 ->
           # blank so just skip to next one
-          loop_state = %LoopState{}
+          { server_state, %LoopState{} }
         {_, _} ->
           Logger.info "unknown command: #{cmd} in loop_state: #{inspect loop_state}"
           dump_state server_state, loop_state
           A.send_error(server_state)
           # ServerState.close_transport(server_state)
-          loop_state = %LoopState{}
+          { server_state, %LoopState{} }
       end
-      # Logger.info ">>> loop_state: #{inspect loop_state}"
-      { server_state, loop_state }
     end
     # Logger.info ">>> server_state: #{inspect server_state}"
     server_state
@@ -833,12 +837,14 @@ defmodule ExMemcached.Server do
 
   defp key_data(extlen, keylen, buffer) do
     case extlen do
-      0 -> << key::binary-size(keylen), data::binary >> = buffer
+      0 ->
+        << key::binary-size(keylen), data::binary >> = buffer
+        {key, data}
       _ ->
         extlen = extlen * 8
         << _::size(extlen), key::binary-size(keylen), data::binary >> = buffer
+        {key, data}
     end
-    {key, data}
   end
 
   def send_stat_response(server_state, key, value, opcode, opaque) when is_binary(value) do
