@@ -11,59 +11,59 @@ defmodule ExMemcached.AsciiCommands do
     ServerState.send_data(server_state, <<"ERROR\r\n">>)
   end
 
-  def send_ascii_reply {:stored, _}, server_state do
+  def send_ascii_reply({:stored, _}, server_state) do
     ServerState.send_data(server_state, <<"STORED\r\n">>)
   end
 
-  def send_ascii_reply :not_stored, server_state do
+  def send_ascii_reply(:not_stored, server_state) do
     ServerState.send_data(server_state, <<"NOT_STORED\r\n">>)
   end
 
-  def send_ascii_reply :exists, server_state do
+  def send_ascii_reply(:exists, server_state) do
     ServerState.send_data(server_state, <<"EXISTS\r\n">>)
   end
 
-  def send_ascii_reply :not_found, server_state do
+  def send_ascii_reply(:not_found, server_state) do
     ServerState.send_data(server_state, <<"NOT_FOUND\r\n">>)
   end
 
-  def send_ascii_reply :deleted, server_state do
+  def send_ascii_reply(:deleted, server_state) do
     ServerState.send_data(server_state, <<"DELETED\r\n">>)
   end
 
-  def send_ascii_reply :touched, server_state do
+  def send_ascii_reply(:touched, server_state) do
     ServerState.send_data(server_state, <<"TOUCHED\r\n">>)
   end
 
-  def send_ascii_reply :ok, server_state do
+  def send_ascii_reply(:ok, server_state) do
     ServerState.send_data(server_state, <<"OK\r\n">>)
   end
 
-  def send_ascii_reply {value, _cas}, server_state do
+  def send_ascii_reply({value, _cas}, server_state) do
     ServerState.send_data(server_state, <<"#{value}\r\n">>)
   end
 
-  def send_ascii_reply :invalid_incr_decr, server_state do
+  def send_ascii_reply(:invalid_incr_decr, server_state) do
     ServerState.send_data(server_state, <<"CLIENT_ERROR cannot increment or decrement non-numeric value\r\n">>)
   end
 
-  def send_ascii_reply :bad_command_line, server_state do
+  def send_ascii_reply(:bad_command_line, server_state) do
     ServerState.send_data(server_state, <<"CLIENT_ERROR bad command line format\r\n">>)
   end
 
-  def send_ascii_reply :bad_delete_command_line, server_state do
+  def send_ascii_reply(:bad_delete_command_line, server_state) do
     ServerState.send_data(server_state, <<"CLIENT_ERROR bad command line format.  Usage: delete <key> [noreply]\r\n">>)
   end
 
-  def send_ascii_reply :flush_disabled, server_state do
+  def send_ascii_reply(:flush_disabled, server_state) do
     ServerState.send_data(server_state, <<"CLIENT_ERROR flush_all not allowed\r\n">>)
   end
 
-  def send_ascii_reply :error, server_state do
+  def send_ascii_reply(:error, server_state) do
     ServerState.send_data(server_state, <<"SERVER_ERROR unknown error\r\n">>)
   end
 
-  def send_ascii_reply _, server_state do
+  def send_ascii_reply(_, server_state) do
     send_error(server_state)
   end
 
@@ -132,7 +132,7 @@ defmodule ExMemcached.AsciiCommands do
         end
         get_cmd tail, buffer, server_state
       true ->
-        send_ascii_reply :bad_command_line, server_state
+        send_ascii_reply(:bad_command_line, server_state)
     end
   end
 
@@ -148,7 +148,7 @@ defmodule ExMemcached.AsciiCommands do
         end
         get_cmd tail, buffer, server_state
       true ->
-        send_ascii_reply :bad_command_line, server_state
+        send_ascii_reply(:bad_command_line, server_state)
     end
   end
 
@@ -199,7 +199,7 @@ defmodule ExMemcached.AsciiCommands do
   end
 
   def delete_cmd([_key, _], server_state) do
-    send_ascii_reply :bad_delete_command_line, server_state
+    send_ascii_reply(:bad_delete_command_line, server_state)
   end
 
   def delete_cmd([_key, _, <<"noreply">>], _server_state) do
@@ -215,14 +215,14 @@ defmodule ExMemcached.AsciiCommands do
 
   def flush_all_cmd([], server_state) do
     case Application.get_env(:ex_memcached, :disable_flush_all) do
-      true -> send_ascii_reply :flush_disabled, server_state
+      true -> send_ascii_reply(:flush_disabled, server_state)
       false -> send_ascii_reply(ExMemcached.flush(0), server_state)
     end
   end
 
   def flush_all_cmd([expiration], server_state) do
     case Application.get_env(:ex_memcached, :disable_flush_all) do
-      true -> send_ascii_reply :flush_disabled, server_state
+      true -> send_ascii_reply(:flush_disabled, server_state)
       false ->
         case expiration do
           <<"noreply">> -> ExMemcached.flush(0)
@@ -233,7 +233,7 @@ defmodule ExMemcached.AsciiCommands do
 
   def flush_all_cmd([expiration, <<"noreply">>], server_state) do
     case Application.get_env(:ex_memcached, :disable_flush_all) do
-      true -> send_ascii_reply :flush_disabled, server_state
+      true -> send_ascii_reply(:flush_disabled, server_state)
       false -> ExMemcached.flush(expiration)
     end
   end

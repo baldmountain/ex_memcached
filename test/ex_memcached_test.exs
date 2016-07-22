@@ -70,7 +70,7 @@ defmodule ExMemcachedTest do
 
   def process_get response, socket do
     response = get_any_extra response, 28, socket
-    <<data::binary-size(28), _>> = response
+    <<data::binary-size(28), _::binary>> = response
     case data do
       << Bd.protocol_binary_res, Bd.protocol_binray_cmd_get, 0::size(16), 4, 0, Bd.protocol_binray_response_success::size(16), body_len::size(32), 0::size(32), cas::size(64), flags::size(32) >> ->
         data_len = body_len - 4
@@ -173,6 +173,7 @@ defmodule ExMemcachedTest do
 
   def b_incr_cas key, socket, count \\ 1, initial \\ 0 do
     key_len = byte_size(key)
+    Logger.info("len #{key}")
     :ok = :gen_tcp.send(socket, <<Bd.protocol_binary_req, Bd.protocol_binray_cmd_increment, key_len::size(16), 20, 0, 0::size(16), 20+key_len::size(32), 0::size(32), 0::size(64),
       count::unsigned-size(64), initial::size(64), 0::size(32) >> <> key)
     {:ok, response} = :gen_tcp.recv(socket, 24)
@@ -261,7 +262,6 @@ defmodule ExMemcachedTest do
 
     # simple set/get
     b_set meta[:socket], "x", "somevale", 5, 19
-    Logger.info "<<<<<<<< here >>>>>>>>>>"
     {"somevale", 5, _} = b_get "x", meta[:socket]
 
     # delete
@@ -309,7 +309,7 @@ defmodule ExMemcachedTest do
 
     {Bd.protocol_binray_response_success, _} = b_add "xx", "ex", 1, 5, meta[:socket]
     {Bd.protocol_binray_response_success, _} = b_add "wye", "why", 2, 5, meta[:socket]
-    [{"ex", 1}, {"why", 2}] = b_get_multi ["xx", "wye", "zed"], meta[:socket]
+    [{"ex", 1}, {"why", 2}] = b_get_multi(["xx", "wye", "zed"], meta[:socket])
 
     # test increment
     b_flush meta[:socket]

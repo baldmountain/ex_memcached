@@ -74,7 +74,7 @@ defmodule ExMemcached.BaseDefinitions do
   define protocol_binray_cmd_rdecr, 0x3b
   define protocol_binray_cmd_rdecrq, 0x3c
 
-  def opcode_description opcode do
+  def opcode_description(opcode) do
     case opcode do
       0 -> "get"
       1 -> "set"
@@ -112,7 +112,7 @@ defmodule ExMemcached.BaseDefinitions do
     end
   end
 
-  def get_binary_tail_piece data, start do
+  def get_binary_tail_piece(data, start) do
     << _rest :: binary-size(start), result :: binary >> = data
     result
   end

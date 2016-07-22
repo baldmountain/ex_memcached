@@ -316,6 +316,11 @@ defmodule ExMemcached.Server do
             << exptime::size(32), key::binary-size(keylen), data::binary >> = tail
             server_state = B.binary_gat_cmd(key, exptime, opcode, opaque, server_state)
             handle_binary_protocol(server_state, data)
+          Bd.protocol_binray_cmd_gatq ->
+            tail = read_expected server_state, tail, extlen + keylen
+            << exptime::size(32), key::binary-size(keylen), data::binary >> = tail
+            server_state = B.binary_gat_cmd(key, exptime, opcode, opaque, server_state)
+            handle_binary_protocol(server_state, data)
           Bd.protocol_binray_cmd_stat ->
             {key, data} = key_data(extlen, keylen, tail)
             case key do
