@@ -127,7 +127,7 @@ defmodule ExMemcached.AsciiCommands do
           :not_found ->
             << >>
           {value, flags, _cas} ->
-            if is_integer(value), do: value = :erlang.integer_to_binary value
+            value = if is_integer(value), do: :erlang.integer_to_binary(value), else: value
             <<"VALUE #{key} #{flags} #{byte_size(value)}\r\n">> <> value <> <<"\r\n">>
         end
         get_cmd tail, buffer, server_state
@@ -143,7 +143,7 @@ defmodule ExMemcached.AsciiCommands do
           :not_found ->
             buffer # skip unfound values
           {value, flags, _cas} ->
-            if is_integer(value), do: value = :erlang.integer_to_binary value
+            value = if is_integer(value), do: :erlang.integer_to_binary(value), else: value
             buffer <> <<"VALUE #{key} #{flags} #{byte_size(value)}\r\n">> <> value <> <<"\r\n">>
         end
         get_cmd tail, buffer, server_state
@@ -161,7 +161,7 @@ defmodule ExMemcached.AsciiCommands do
       :not_found ->
         << >> # skip unfound values
       {value, flags, cas} ->
-        if is_integer(value), do: value = :erlang.integer_to_binary value
+        value = if is_integer(value), do: :erlang.integer_to_binary(value), else: value
         <<"VALUE #{key} #{flags} #{byte_size(value)} #{cas}\r\n">> <> value <> <<"\r\n">>
     end
     gets_cmd tail, buffer, server_state
@@ -172,7 +172,7 @@ defmodule ExMemcached.AsciiCommands do
       :not_found ->
         buffer # skip unfound values
       {value, flags, cas} ->
-        if is_integer(value), do: value = :erlang.integer_to_binary value
+        value = if is_integer(value), do: :erlang.integer_to_binary(value), else: value
         buffer <> <<"VALUE #{key} #{flags} #{byte_size(value)} #{cas}\r\n">> <> value <> <<"\r\n">>
     end
     gets_cmd tail, buffer, server_state
@@ -283,11 +283,11 @@ defmodule ExMemcached.AsciiCommands do
     ServerState.send_data(server_state, <<"END\r\n">>)
   end
 
-  def stats_cmd(["stats", value], server_state) do
+  def stats_cmd(["stats", _value], server_state) do
     ServerState.send_data(server_state, <<"END\r\n">>)
   end
 
-  def stats_cmd(["stats", value, parameter], server_state) do
+  def stats_cmd(["stats", _value, _parameter], server_state) do
     ServerState.send_data(server_state, <<"END\r\n">>)
   end
 

@@ -2,25 +2,25 @@ defmodule ExMemcachedTest do
   use ExUnit.Case
   require ExMemcached.BaseDefinitions
   alias ExMemcached.BaseDefinitions, as: Bd
-  require Lager
+  require Logger
 
   setup_all do
     {:ok, socket} = :gen_tcp.connect('localhost', 8080, [:binary, {:packet, 0}, {:active, false}])
     {:ok, [socket: socket]}
   end
 
-  teardown_all meta do
-    :gen_tcp.close(meta[:socket])
-  end
+  # teardown_all meta do
+  #   :gen_tcp.close(meta[:socket])
+  # end
 
   def set key, value, flags, expiration, socket do
-    :ok = :gen_tcp.send(socket, 'set #{key} #{flags} #{expiration} #{size(value)}\r\n#{value}\r\n')
+    :ok = :gen_tcp.send(socket, 'set #{key} #{flags} #{expiration} #{byte_size(value)}\r\n#{value}\r\n')
     {:ok, response} = :gen_tcp.recv(socket, 0)
     response
   end
 
     def add key, value, flags, expiration, socket do
-      :ok = :gen_tcp.send(socket, 'add #{key} #{flags} #{expiration} #{size(value)}\r\n#{value}\r\n')
+      :ok = :gen_tcp.send(socket, 'add #{key} #{flags} #{expiration} #{byte_size(value)}\r\n#{value}\r\n')
       {:ok, response} = :gen_tcp.recv(socket, 0)
       response
     end
@@ -31,8 +31,8 @@ defmodule ExMemcachedTest do
   end
 
   def b_set socket, key, value, flags, expiry, cas \\0 do
-    body_len = 8 + size(key) + size(value)
-    :ok = :gen_tcp.send(socket, <<Bd.protocol_binary_req, Bd.protocol_binray_cmd_set, size(key)::size(16), 8, 0, 0::size(16), body_len::size(32),
+    body_len = 8 + byte_size(key) + byte_size(value)
+    :ok = :gen_tcp.send(socket, <<Bd.protocol_binary_req, Bd.protocol_binray_cmd_set, byte_size(key)::size(16), 8, 0, 0::size(16), body_len::size(32),
       0::size(32), cas::size(64), flags::size(32), expiry::size(32) >> <> key <> value)
     {:ok, response} = :gen_tcp.recv(socket, 0)
     << Bd.protocol_binary_res, Bd.protocol_binray_cmd_set, 0::size(16), 0, 0, status::size(16), _body_len::size(32), 0::size(32), cas::size(64), _tail::binary >> = response
@@ -40,8 +40,8 @@ defmodule ExMemcachedTest do
   end
 
   def b_add key, value, flags, expiry, socket do
-    body_len = 8 + size(key) + size(value)
-    :ok = :gen_tcp.send(socket, <<Bd.protocol_binary_req, Bd.protocol_binray_cmd_add, size(key)::size(16), 8, 0, 0::size(16), body_len::size(32),
+    body_len = 8 + byte_size(key) + byte_size(value)
+    :ok = :gen_tcp.send(socket, <<Bd.protocol_binary_req, Bd.protocol_binray_cmd_add, byte_size(key)::size(16), 8, 0, 0::size(16), body_len::size(32),
       0::size(32), 0::size(64), flags::size(32), expiry::size(32) >> <> key <> value)
     {:ok, response} = :gen_tcp.recv(socket, 0)
     << Bd.protocol_binary_res, Bd.protocol_binray_cmd_add, 0::size(16), 0, 0, status::size(16), _body_len::size(32), 0::size(32), cas::size(64), _tail::binary >> = response
@@ -49,8 +49,8 @@ defmodule ExMemcachedTest do
   end
 
   def b_replace key, value, flags, expiry, socket do
-    body_len = 8 + size(key) + size(value)
-    :ok = :gen_tcp.send(socket, <<Bd.protocol_binary_req, Bd.protocol_binray_cmd_replace, size(key)::size(16), 8, 0, 0::size(16), body_len::size(32),
+    body_len = 8 + byte_size(key) + byte_size(value)
+    :ok = :gen_tcp.send(socket, <<Bd.protocol_binary_req, Bd.protocol_binray_cmd_replace, byte_size(key)::size(16), 8, 0, 0::size(16), body_len::size(32),
       0::size(32), 0::size(64), flags::size(32), expiry::size(32) >> <> key <> value)
     {:ok, response} = :gen_tcp.recv(socket, 0)
     << Bd.protocol_binary_res, Bd.protocol_binray_cmd_replace, 0::size(16), 0, 0, status::size(16), _body_len::size(32), 0::size(32), _::size(64), _tail::binary >> = response
@@ -58,7 +58,7 @@ defmodule ExMemcachedTest do
   end
 
   defp get_any_extra response, needed, socket do
-    len = size(response)
+    len = byte_size(response)
     cond do
       len < needed ->
         {:ok, xtra} = :gen_tcp.recv(socket, needed - len)
@@ -70,13 +70,13 @@ defmodule ExMemcachedTest do
 
   def process_get response, socket do
     response = get_any_extra response, 28, socket
-    <<data::[binary, size(28)], _>> = response
+    <<data::binary-size(28), _>> = response
     case data do
       << Bd.protocol_binary_res, Bd.protocol_binray_cmd_get, 0::size(16), 4, 0, Bd.protocol_binray_response_success::size(16), body_len::size(32), 0::size(32), cas::size(64), flags::size(32) >> ->
         data_len = body_len - 4
         # header + flags, response, anything else
         response = get_any_extra response, 28+data_len, socket
-        << header::[binary, size(28)], value::[binary, size(data_len)] >> = response
+        << header::binary-size(28), value::binary-size(data_len) >> = response
         {value, flags, cas}
       << Bd.protocol_binary_res, Bd.protocol_binray_cmd_get, 0::size(16), 4, 0, status::size(16), _body_len::size(32), 0::size(32), _cas::size(64), _flags::size(32) >> -> {:error, status}
     end
@@ -92,17 +92,17 @@ defmodule ExMemcachedTest do
       << Bd.protocol_binary_res, Bd.protocol_binray_cmd_getq, 0::size(16), 4, 0, Bd.protocol_binray_response_success::size(16), body_len::size(32), _opaque::size(32), _cas::size(64) >> ->
         data_len = body_len - 4
         # header + flags, response, value, anything else
-        <<header::[binary, size(24)], flags::size(32), value::[binary, size(data_len)], rest::binary >> = response
+        <<header::binary-size(24), flags::size(32), value::binary-size(data_len), rest::binary >> = response
         process_getq rest, result ++ [{value, flags}]
       << Bd.protocol_binary_res, Bd.protocol_binray_cmd_noop, 0::size(16), 0, 0, Bd.protocol_binray_response_success::size(16), _body_len::size(32), _opaque::size(32), _cas::size(64) >> ->
         # header, anything else
-        <<header::[binary, size(24)], rest::binary >> = response
+        <<header::binary-size(24), rest::binary >> = response
         process_getq rest, result
     end
   end
 
   def b_get key, socket do
-    body_len = size(key)
+    body_len = byte_size(key)
     :ok = :gen_tcp.send(socket, <<Bd.protocol_binary_req, Bd.protocol_binray_cmd_get, body_len::size(16), 0, 0, 0::size(16), body_len::size(32),
       0::size(32), 0::size(64) >> <> key)
     {:ok, response} = :gen_tcp.recv(socket, 0)
@@ -110,7 +110,7 @@ defmodule ExMemcachedTest do
   end
 
   def b_delete key, socket do
-    body_len = size(key)
+    body_len = byte_size(key)
     :ok = :gen_tcp.send(socket, <<Bd.protocol_binary_req, Bd.protocol_binray_cmd_delete, body_len::size(16), 0, 0, 0::size(16), body_len::size(32),
       0::size(32), 0::size(64) >> <> key)
     {:ok, response} = :gen_tcp.recv(socket, 0)
@@ -119,7 +119,7 @@ defmodule ExMemcachedTest do
   end
 
   def b_empty key, socket do
-    body_len = size(key)
+    body_len = byte_size(key)
     :ok = :gen_tcp.send(socket, <<Bd.protocol_binary_req, Bd.protocol_binray_cmd_get, body_len::size(16), 0, 0, 0::size(16), body_len::size(32),
       0::size(32), 0::size(64) >> <> key)
     {:ok, response} = :gen_tcp.recv(socket, 0)
@@ -147,11 +147,11 @@ defmodule ExMemcachedTest do
   end
 
   def b_get_multi keys, socket do
-    Enum.with_index(keys) |> Enum.each fn({key, index}) ->
-      body_len = size(key)
+    Enum.with_index(keys) |> Enum.each(fn({key, index}) ->
+      body_len = byte_size(key)
       :ok = :gen_tcp.send(socket, <<Bd.protocol_binary_req, Bd.protocol_binray_cmd_getq, body_len::size(16), 0, 0, 0::size(16), body_len::size(32),
         index::size(32), 0::size(64) >> <> key)
-    end
+    end)
     # send noop
     :ok = :gen_tcp.send(socket, <<Bd.protocol_binary_req, Bd.protocol_binray_cmd_noop, 0::size(16), 4, 0, 0::size(16), 0::size(32), 0::size(32), 0::size(64), 0::size(32)>>)
 
@@ -172,16 +172,16 @@ defmodule ExMemcachedTest do
   end
 
   def b_incr_cas key, socket, count \\ 1, initial \\ 0 do
-    key_len = size(key)
+    key_len = byte_size(key)
     :ok = :gen_tcp.send(socket, <<Bd.protocol_binary_req, Bd.protocol_binray_cmd_increment, key_len::size(16), 20, 0, 0::size(16), 20+key_len::size(32), 0::size(32), 0::size(64),
-      count::[unsigned, size(64)], initial::size(64), 0::size(32) >> <> key)
+      count::unsigned-size(64), initial::size(64), 0::size(32) >> <> key)
     {:ok, response} = :gen_tcp.recv(socket, 24)
     << Bd.protocol_binary_res, Bd.protocol_binray_cmd_increment, 0::size(16), 0, 0, status::size(16), body_len::size(32),
       0::size(32), cas::size(64) >> = response
     case status do
       Bd.protocol_binray_response_success ->
         {:ok, response} = :gen_tcp.recv(socket, 8)
-        << ans::[unsigned, size(64)]>> = response
+        << ans::unsigned-size(64)>> = response
         {ans, cas}
       Bd.protocol_binray_response_einval ->
         {:ok, response} = :gen_tcp.recv(socket, body_len)
@@ -193,16 +193,16 @@ defmodule ExMemcachedTest do
   end
 
   def b_decr key, socket, count \\ 1, initial \\ 0 do
-    key_len = size(key)
+    key_len = byte_size(key)
     :ok = :gen_tcp.send(socket, <<Bd.protocol_binary_req, Bd.protocol_binray_cmd_decrement, key_len::size(16), 20, 0, 0::size(16), 20+key_len::size(32), 0::size(32), 0::size(64),
-      count::[unsigned, size(64)], initial::size(64), 0::size(32) >> <> key)
+      count::unsigned-size(64), initial::size(64), 0::size(32) >> <> key)
     {:ok, response} = :gen_tcp.recv(socket, 24)
     << Bd.protocol_binary_res, Bd.protocol_binray_cmd_decrement, 0::size(16), 0, 0, status::size(16), _body_len::size(32),
       0::size(32), _cas::size(64) >> = response
     case status do
       Bd.protocol_binray_response_success ->
         {:ok, response} = :gen_tcp.recv(socket, 8)
-        << ans::[unsigned, size(64)]>> = response
+        << ans::unsigned-size(64)>> = response
         ans
       Bd.protocol_binray_response_einval ->
         :invalid
@@ -232,13 +232,13 @@ defmodule ExMemcachedTest do
   test "binary-get.t", meta do
     # test in binary-get.t
     Enum.with_index(["mooo\0", "mumble\0\0\0\0\r\rblarg", "\0", "\r"])
-      |> Enum.each fn ({item, idx}) ->
+      |> Enum.each(fn ({item, idx}) ->
         key = "foo#{idx}"
         response = set key, item, 0, 0, meta[:socket]
         assert(response == "STORED\r\n")
         values = get key, meta[:socket]
         assert Dict.get(values, key) == item
-      end
+      end)
   end
 
   test "binary.t", meta do
@@ -246,7 +246,7 @@ defmodule ExMemcachedTest do
     assert Dict.size(values) == 0
 
     # test version
-    assert "0.0.1" == b_version meta[:socket]
+    assert "0.0.2" == b_version meta[:socket]
 
     # bug 71
     stats meta[:socket]
@@ -261,6 +261,7 @@ defmodule ExMemcachedTest do
 
     # simple set/get
     b_set meta[:socket], "x", "somevale", 5, 19
+    Logger.info "<<<<<<<< here >>>>>>>>>>"
     {"somevale", 5, _} = b_get "x", meta[:socket]
 
     # delete

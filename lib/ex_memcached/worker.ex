@@ -34,18 +34,21 @@ defmodule ExMemcached.Worker do
   def handle_call({:get, key} , _from, {data, work_state}) do
     case Dict.get(data, key) do
       nil ->
+        Logger.debug "not found"
         { :reply, :not_found, {data, WorkerState.miss(work_state)} }
       {value, timestamp, flags, exptime, cas} ->
         case check_expiration(value, timestamp, exptime) do
           nil ->
+            Logger.debug "expired"
             { :reply, :not_found, {HashDict.delete(data, key), WorkerState.allocated_change(WorkerState.miss(work_state), -byte_size(value))} }
           value ->
+            Logger.debug "get >> #{value}"
             { :reply, {value, flags, cas}, {data, WorkerState.hit(work_state)} }
         end
     end
   end
 
-  def handle_call({:set, _key, nil, _flags, _exptime, cas}, _from, {data, work_state}) do
+  def handle_call({:set, _key, nil, _flags, _exptime, _cas}, _from, {data, work_state}) do
     { :reply, :error, {data, work_state} }
   end
 
@@ -86,7 +89,7 @@ defmodule ExMemcached.Worker do
   def handle_call({:replace, key, value, flags, expirary}, _from, {data, work_state}) do
     case Dict.get(data, key) do
       nil ->
-        { :reply, :not_stored, {data, work_state} }
+        { :reply, :not_found, {data, work_state} }
       {old_value, timestamp, _, exptime, _} ->
         case check_expiration(old_value, timestamp, exptime) do
           nil ->
@@ -192,13 +195,13 @@ defmodule ExMemcached.Worker do
             { :reply, {intial, work_state.current_cas}, {data, WorkerState.next_cas(work_state)} }
           value when is_integer(value) ->
             value = value + count
-            if value > 0xffffffffffffffff, do: value = value - 0x10000000000000000
+            value = if value > 0xffffffffffffffff, do: value - 0x10000000000000000, else: value
             data = Dict.put(data, key, {value, generate_expire_time(expiration), flags, exptime, work_state.current_cas})
             { :reply, {value, work_state.current_cas}, {data, WorkerState.next_cas(work_state)} }
           value when is_binary(value) ->
             try do
               value = :erlang.binary_to_integer(value) + count
-              if value > 0xffffffffffffffff, do: value = value - 0x10000000000000000
+              value = if value > 0xffffffffffffffff, do: value - 0x10000000000000000, else: value
               data = Dict.put(data, key, {value, generate_expire_time(expiration), flags, exptime, work_state.current_cas})
               { :reply, {value, work_state.current_cas}, {data, WorkerState.next_cas(work_state)} }
             catch
@@ -230,13 +233,13 @@ defmodule ExMemcached.Worker do
             { :reply, {intial, work_state.current_cas}, {data, WorkerState.next_cas(work_state)} }
           value when is_integer(value) ->
             value = value - count
-            if value < 0, do: value = 0
+            value = if value < 0, do: 0, else: value
             data = Dict.put(data, key, {value, generate_expire_time(expiration), flags, exptime, work_state.current_cas})
             { :reply, {value, work_state.current_cas}, {data, WorkerState.next_cas(work_state)} }
           value when is_binary(value) ->
             try do
               value = :erlang.binary_to_integer(value) - count
-              if value < 0, do: value = 0
+              value = if value < 0, do: value = 0, else: value
               data = Dict.put(data, key, {value, generate_expire_time(expiration), flags, exptime, work_state.current_cas})
               { :reply, {value, work_state.current_cas}, {data, WorkerState.next_cas(work_state)} }
             catch
@@ -264,7 +267,7 @@ defmodule ExMemcached.Worker do
       0 -> { :reply, :ok, {HashDict.new, %WorkerState{work_state | allocated: 0 } } }
       _ ->
         {data, work_state} = Dict.keys(data)
-          |> Enum.reduce data, fn(key, data) ->
+          |> Enum.reduce({data, work_state}, fn(key, {data, work_state}) ->
             case Dict.get(data, key) do
               {value, timestamp, flags, exptime, cas} ->
                 case check_expiration(value, timestamp, exptime) do
@@ -275,7 +278,7 @@ defmodule ExMemcached.Worker do
                 end
               _ -> { data, work_state }
             end
-          end
+          end)
         { :reply, :ok, {data, work_state} }
     end
   end
