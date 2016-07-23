@@ -173,8 +173,8 @@ defmodule ExMemcachedTest do
 
   def b_incr_cas key, socket, count \\ 1, initial \\ 0 do
     key_len = byte_size(key)
-    Logger.info("len #{key}")
-    :ok = :gen_tcp.send(socket, <<Bd.protocol_binary_req, Bd.protocol_binray_cmd_increment, key_len::size(16), 20, 0, 0::size(16), 20+key_len::size(32), 0::size(32), 0::size(64),
+    body_len = 20 + key_len
+    :ok = :gen_tcp.send(socket, <<Bd.protocol_binary_req, Bd.protocol_binray_cmd_increment, key_len::size(16), 20, 0, 0::size(16), body_len::size(32), 0::size(32), 0::size(64),
       count::unsigned-size(64), initial::size(64), 0::size(32) >> <> key)
     {:ok, response} = :gen_tcp.recv(socket, 24)
     << Bd.protocol_binary_res, Bd.protocol_binray_cmd_increment, 0::size(16), 0, 0, status::size(16), body_len::size(32),
@@ -316,7 +316,7 @@ defmodule ExMemcachedTest do
     assert 0 == b_incr "x", meta[:socket]
     assert 1 == b_incr "x", meta[:socket]
     assert 212 == b_incr "x", meta[:socket], 211
-    assert 8589934804 == b_incr "x", meta[:socket], Float.floor(:math.pow(2, 33))
+    assert 8589934804 == b_incr "x", meta[:socket], round(Float.floor(:math.pow(2, 33)))
 
     # Issue 48 - incrementing plain text.
     b_set meta[:socket], "issue48", "text", 0, 0
