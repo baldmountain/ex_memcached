@@ -220,7 +220,7 @@ defmodule ExMemcached.BinaryCommands do
   end
 
   def binary_gat_cmd(key, expirary, opcode, opaque, server_state) do
-    # Logger.info "binary_gat_cmd: #{expirary} #{key} 0x#{:erlang.integer_to_binary(opaque, 16)}"
+    Logger.info "binary_gat_cmd: #{expirary} #{key} 0x#{:erlang.integer_to_binary(opaque, 16)}"
     case ExMemcached.gat(key, expirary) do
       {value, flags, cas} when is_integer(value) ->
         send_response_header(server_state, opcode, 0, 4, 0, Bd.protocol_binray_response_success, 12, opaque, cas)
@@ -235,6 +235,29 @@ defmodule ExMemcached.BinaryCommands do
           ServerState.send_data(server_state, << flags::size(32) >>)
         end
       :not_found -> send_error(server_state, opcode, opaque, Bd.protocol_binray_response_key_enoent)
+    end
+  end
+
+  def binary_gatq_cmd(key, expirary, opcode, opaque, server_state) do
+    Logger.info "binary_gatq_cmd: #{expirary} #{key} 0x#{:erlang.integer_to_binary(opaque, 16)}"
+    case ExMemcached.gat(key, expirary) do
+      {value, flags, cas} when is_integer(value) ->
+        response = make_response_header(opcode, 0, 4, 0, Bd.protocol_binray_response_success, 12, opaque, cas)
+          <> << flags::size(32) >> <> << value::size(64) >>
+        %ServerState{server_state | stored_responses: server_state.stored_responses <> response}
+      {value, flags, cas} when is_binary(value) ->
+        len = byte_size(value)
+        if len > 0 do
+          response = make_response_header(opcode, 0, 4, 0, Bd.protocol_binray_response_success, len + 4, opaque, cas)
+            <> << flags::size(32) >> <> value
+          %ServerState{server_state | stored_responses: server_state.stored_responses <> response}
+        else
+          send_response_header(server_state, opcode, 0, 4, 0, Bd.protocol_binray_response_success, 4, opaque, cas)
+          ServerState.send_data(server_state, << flags::size(32) >>)
+        end
+      :not_found ->
+        Logger.debug("c")
+        server_state # send_error(server_state, opcode, opaque, Bd.protocol_binray_response_key_enoent)
     end
   end
 
