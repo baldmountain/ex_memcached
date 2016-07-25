@@ -26,7 +26,8 @@ defmodule ExMemcached.Server do
         data = server_state.existing_data <> data
         server_state = %ServerState{server_state | existing_data: ""}
         server_state = cond do
-          String.starts_with?(data, << Bd.protocol_binary_req >>) -> handle_binary_protocol(server_state, data)
+          String.starts_with?(data, << Bd.protocol_binary_req >>) ->
+            handle_binary_protocol(server_state, data)
           true ->
             cond do
               String.contains?(data, "\r\n") -> handle_ascii_protocol(server_state, data)
@@ -34,7 +35,8 @@ defmodule ExMemcached.Server do
             end
         end
   			loop(server_state)
-  		_res ->
+  		res ->
+        Logger.error "receive error: #{inspect res}"
   			:ok = ServerState.close_transport(server_state)
   	end
   end
@@ -105,13 +107,17 @@ defmodule ExMemcached.Server do
                   {data, rest} ->
                     ExMemcached.set(key, data, flags, exptime, cas)
                     handle_binary_protocol(server_state, rest)
-                  data -> ExMemcached.set(key, data, flags, exptime, cas)
+                  data ->
+                    ExMemcached.set(key, data, flags, exptime, cas)
+                    server_state
                 end
             end
           Bd.protocol_binray_cmd_add ->
             tail = read_expected server_state, tail, extlen + keylen
             data_len = bodylen - extlen - keylen
+            # Logger.debug "data_len: #{data_len} tail: #{inspect tail}"
             << flags::size(32), exptime::size(32), key::binary-size(keylen), data::binary >> = tail
+            # Logger.debug "key: #{key} tail: #{inspect data}"
             cond do
               data_len > Application.get_env(:ex_memcached, :max_data_size) ->
                 # delete if the key exists
@@ -269,8 +275,8 @@ defmodule ExMemcached.Server do
               _ ->
                 len = 8 * extlen
                 tail = read_expected server_state, tail, len
-                << expiration::size(len), data::binary >> = tail
-                {expiration, data}
+                << expiration::size(len), rest::binary >> = tail
+                {expiration, rest}
             end
             server_state = B.binary_flushq_cmd(expiration, opcode, opaque, server_state)
             handle_binary_protocol(server_state, data)
@@ -354,7 +360,7 @@ defmodule ExMemcached.Server do
               end
             handle_binary_protocol(server_state, data)
           _ ->
-            Logger.info "Unknown opcode: #{opcode}"
+            # Logger.info "Unknown opcode: #{opcode}"
             {_key, data} = key_data(extlen, keylen, tail)
             B.send_response_header(server_state, opcode, 0, 0, 0, Bd.protocol_binray_response_unknown_command, 0, opaque)
             handle_binary_protocol(server_state, data)
@@ -362,17 +368,18 @@ defmodule ExMemcached.Server do
       end
     catch
       :error, :badmatch ->
-        Logger.info "Badmatch on input command"
+        Logger.info "Badmatch on input command  #{Exception.format_stacktrace(System.stacktrace())}"
         << _magic, opcode, _tail::binary >> = data
         B.send_response_header(server_state, opcode, 0, 0, 0, Bd.protocol_binray_response_einval, 0, 0)
       :exit, value ->
-        Logger.info "exit called with #{inspect value}"
+        Logger.info "exit called with #{inspect value} #{Exception.format_stacktrace(System.stacktrace())}"
         server_state
       :throw, value ->
-        Logger.info "Throw called with #{inspect value}"
+        Logger.info "Throw called with #{inspect value} #{Exception.format_stacktrace(System.stacktrace())}"
         server_state
       what, value ->
-        Logger.info "1> Caught #{what} with #{inspect value}"
+        << _magic, opcode, _tail::binary >> = data
+        Logger.info "1> Caught #{inspect what} with #{inspect value} data: #{inspect data} #{Exception.format_stacktrace(System.stacktrace())}"
         try do
           << _magic, opcode, _keylen::big-unsigned-integer-size(16), _extlen, _datatype, _reserved::big-unsigned-integer-size(16),
             _bodylen::big-unsigned-integer-size(32), opaque::big-unsigned-integer-size(32), _tail::binary >> = data
@@ -421,7 +428,7 @@ defmodule ExMemcached.Server do
                   A.send_ascii_reply :bad_command_line, server_state
                   %LoopState{}
                 what, value ->
-                  Logger.info "3> Caught #{inspect what} with #{inspect value}"
+                  Logger.info "3> Caught #{inspect what} with #{inspect value} #{Exception.format_stacktrace(System.stacktrace())}"
                   %LoopState{}
               end
             [_, k, flags, exptime, data_length, nr] ->
@@ -432,7 +439,7 @@ defmodule ExMemcached.Server do
                   A.send_ascii_reply :bad_command_line, server_state
                   %LoopState{}
                 what, value ->
-                  Logger.info "4> Caught #{inspect what} with #{inspect value}"
+                  Logger.info "4> Caught #{inspect what} with #{inspect value} #{Exception.format_stacktrace(System.stacktrace())}"
                   %LoopState{}
               end
             _ ->
@@ -588,7 +595,7 @@ defmodule ExMemcached.Server do
                   A.send_ascii_reply :bad_command_line, server_state
                   %LoopState{}
                 what, value ->
-                  Logger.info "9> Caught #{inspect what} with #{inspect value}"
+                  Logger.info "9> Caught #{inspect what} with #{inspect value} #{Exception.format_stacktrace(System.stacktrace())}"
                   %LoopState{}
               end
             [_, k, flags, exptime, data_length, nr] ->
@@ -599,7 +606,7 @@ defmodule ExMemcached.Server do
                   A.send_ascii_reply :bad_command_line, server_state
                   %LoopState{}
                 what, value ->
-                  Logger.info "10> Caught #{inspect what} with #{inspect value}"
+                  Logger.info "10> Caught #{inspect what} with #{inspect value} #{Exception.format_stacktrace(System.stacktrace())}"
                   %LoopState{}
               end
             _ ->
@@ -637,7 +644,7 @@ defmodule ExMemcached.Server do
                   A.send_ascii_reply :bad_command_line, server_state
                   %LoopState{}
                 what, value ->
-                  Logger.info "11> Caught #{inspect what} with #{inspect value}"
+                  Logger.info "11> Caught #{inspect what} with #{inspect value} #{Exception.format_stacktrace(System.stacktrace())}"
                   %LoopState{}
               end
             [_, k, flags, exptime, data_length, nr] ->
@@ -648,7 +655,7 @@ defmodule ExMemcached.Server do
                   A.send_ascii_reply :bad_command_line, server_state
                   %LoopState{}
                 what, value ->
-                  Logger.info "12> Caught #{inspect what} with #{inspect value}"
+                  Logger.info "12> Caught #{inspect what} with #{inspect value} #{Exception.format_stacktrace(System.stacktrace())}"
                   %LoopState{}
               end
             _ ->
@@ -686,7 +693,7 @@ defmodule ExMemcached.Server do
                   A.send_ascii_reply :bad_command_line, server_state
                   %LoopState{}
                 what, value ->
-                  Logger.info "13> Caught #{inspect what} with #{inspect value}"
+                  Logger.info "13> Caught #{inspect what} with #{inspect value} #{Exception.format_stacktrace(System.stacktrace())}"
                   %LoopState{}
               end
             [_, k, flags, exptime, data_length, cas, nr] when byte_size(cas) > 0->
@@ -697,7 +704,7 @@ defmodule ExMemcached.Server do
                   A.send_ascii_reply :bad_command_line, server_state
                   %LoopState{}
                 what, value ->
-                  Logger.info "14> Caught #{inspect what} with #{inspect value}"
+                  Logger.info "14> Caught #{inspect what} with #{inspect data} #{Exception.format_stacktrace(System.stacktrace())}"
                   %LoopState{}
               end
             _ ->

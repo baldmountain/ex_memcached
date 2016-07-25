@@ -27,7 +27,7 @@ defmodule ExMemcached.Mixfile do
   defp deps do
     [
       { :ranch, "~> 1.2.1" },
-      {:exrm, "~> 1.0.8"}
+      { :exrm, "~> 1.0.8" }
     ]
   end
 

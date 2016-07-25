@@ -100,7 +100,7 @@ defmodule ExMemcached.BaseDefinitions do
       21 -> "incrementq"
       22 -> "decrementq"
       23 -> "quitq"
-      24 -> "flush"
+      24 -> "flushq"
       25 -> "appendq"
       26 -> "prependq"
       0x1c -> "touch"

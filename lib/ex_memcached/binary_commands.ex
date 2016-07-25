@@ -130,7 +130,7 @@ defmodule ExMemcached.BinaryCommands do
   end
 
   def binary_get_cmd(key, opcode, opaque, server_state) do
-    Logger.info "binary_get_cmd: #{key} 0x#{:erlang.integer_to_binary(opaque, 16)}"
+    # Logger.info "binary_get_cmd: #{key} 0x#{:erlang.integer_to_binary(opaque, 16)}"
     case ExMemcached.get(key) do
       {value, flags, cas} when is_integer(value) ->
         send_response_header(server_state, opcode, 0, 4, 0, Bd.protocol_binray_response_success, 12, opaque, cas)
@@ -295,9 +295,10 @@ defmodule ExMemcached.BinaryCommands do
     send_response_header(server_state, opcode, 0, 0, 0, Bd.protocol_binray_response_success, 0, opaque)
   end
 
-  def binary_flushq_cmd(expiration, _opcode, _opaque, server_state) do
-    # Logger.info "binary_flushq_cmd:"
+  def binary_flushq_cmd(expiration, opcode, _opaque, server_state) do
+    # Logger.info "binary_flushq_cmd: #{Bd.opcode_description(opcode)}"
     :ok = ExMemcached.flush expiration
+    # send_response_header_q(server_state, opcode, 0, 0, 0, Bd.protocol_binray_response_success, 0, opaque)
     server_state
   end
 

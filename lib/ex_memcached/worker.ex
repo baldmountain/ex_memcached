@@ -34,15 +34,12 @@ defmodule ExMemcached.Worker do
   def handle_call({:get, key} , _from, {data, work_state}) do
     case Dict.get(data, key) do
       nil ->
-        Logger.debug "not found"
         { :reply, :not_found, {data, WorkerState.miss(work_state)} }
       {value, timestamp, flags, exptime, cas} ->
         case check_expiration(value, timestamp, exptime) do
           nil ->
-            Logger.debug "expired"
             { :reply, :not_found, {HashDict.delete(data, key), WorkerState.allocated_change(WorkerState.miss(work_state), -byte_size(value))} }
           value ->
-            Logger.debug "get >> #{value}"
             { :reply, {value, flags, cas}, {data, WorkerState.hit(work_state)} }
         end
     end
