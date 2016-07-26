@@ -50,7 +50,7 @@ defmodule ExMemcached.Server do
       data = read_expected server_state, data, 24
       << Bd.protocol_binary_req, opcode, keylen::big-unsigned-integer-size(16), extlen, datatype, reserved::big-unsigned-integer-size(16),
         bodylen::big-unsigned-integer-size(32), opaque::big-unsigned-integer-size(32), cas::big-unsigned-integer-size(64), tail::binary >> = data
-        Logger.info "#{Bd.opcode_description opcode} keylen #{keylen} extlen #{extlen} datatype #{datatype} reserved #{reserved} bodylen #{bodylen} opaque #{opaque} cas #{cas}"
+        # Logger.info "#{Bd.opcode_description opcode} keylen #{keylen} extlen #{extlen} datatype #{datatype} reserved #{reserved} bodylen #{bodylen} opaque #{opaque} cas #{cas}"
 
       if keylen > 250 do
         B.send_error(server_state, opcode, opaque, Bd.protocol_binray_response_e2big)
@@ -115,9 +115,7 @@ defmodule ExMemcached.Server do
           Bd.protocol_binray_cmd_add ->
             tail = read_expected server_state, tail, extlen + keylen
             data_len = bodylen - extlen - keylen
-            # Logger.debug "data_len: #{data_len} tail: #{inspect tail}"
             << flags::size(32), exptime::size(32), key::binary-size(keylen), data::binary >> = tail
-            # Logger.debug "key: #{key} tail: #{inspect data}"
             cond do
               data_len > Application.get_env(:ex_memcached, :max_data_size) ->
                 # delete if the key exists
@@ -310,7 +308,7 @@ defmodule ExMemcached.Server do
               {data, rest} ->
                 server_state = B.binary_prependq_cmd(key, data, opcode, opaque, server_state)
                 handle_binary_protocol(server_state, rest)
-              data -> server_state = B.binary_prependq_cmd(key, data, opcode, opaque, server_state)
+              data -> B.binary_prependq_cmd(key, data, opcode, opaque, server_state)
             end
           Bd.protocol_binray_cmd_touch ->
             tail = read_expected server_state, tail, extlen + keylen
@@ -378,7 +376,7 @@ defmodule ExMemcached.Server do
         Logger.info "Throw called with #{inspect value} #{Exception.format_stacktrace(System.stacktrace())}"
         server_state
       what, value ->
-        << _magic, opcode, _tail::binary >> = data
+        << _magic, _opcode, _tail::binary >> = data
         Logger.info "1> Caught #{inspect what} with #{inspect value} data: #{inspect data} #{Exception.format_stacktrace(System.stacktrace())}"
         try do
           << _magic, opcode, _keylen::big-unsigned-integer-size(16), _extlen, _datatype, _reserved::big-unsigned-integer-size(16),
@@ -576,7 +574,6 @@ defmodule ExMemcached.Server do
                 byte_size(rest) > 0 -> %ServerState{server_state | existing_data: rest}
                 true -> server_state
               end
-            cmd
               A.replace_cmd(loop_state, cmd, server_state)
               server_state
           end
@@ -704,7 +701,7 @@ defmodule ExMemcached.Server do
                   A.send_ascii_reply :bad_command_line, server_state
                   %LoopState{}
                 what, value ->
-                  Logger.info "14> Caught #{inspect what} with #{inspect data} #{Exception.format_stacktrace(System.stacktrace())}"
+                  Logger.info "14> Caught #{inspect what} with #{inspect value} #{Exception.format_stacktrace(System.stacktrace())}"
                   %LoopState{}
               end
             _ ->

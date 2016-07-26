@@ -3,7 +3,7 @@ defmodule ExMemcached.ServerState do
   defstruct socket: nil, transport: nil, existing_data: "", stored_responses: << >>
 
   def close_transport(server_state = %ExMemcached.ServerState{}) do
-    Logger.debug("Closing: #{Exception.format_stacktrace()}")
+    # Logger.debug("Closing: #{Exception.format_stacktrace()}")
     :timer.sleep(500)
     server_state.transport.close(server_state.socket)
     exit("transport closed")

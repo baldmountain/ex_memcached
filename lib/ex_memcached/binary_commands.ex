@@ -42,7 +42,7 @@ defmodule ExMemcached.BinaryCommands do
   end
 
   def send_error(server_state, opcode, opaque, Bd.protocol_binray_response_not_stored) do
-    send_response_header(server_state, opcode, 0, 0, 0, Bd.protocol_binray_response_not_stored, 7, opaque)
+    send_response_header(server_state, opcode, 0, 0, 0, Bd.protocol_binray_response_not_stored, 10, opaque)
     ServerState.send_data(server_state, <<"Not stored">>)
   end
 
@@ -69,7 +69,7 @@ defmodule ExMemcached.BinaryCommands do
   end
 
   def binary_set_cmd(key, value, flags, exptime, opcode, opaque, cas, server_state) do
-    Logger.info "binary_set_cmd: #{key} #{inspect value} #{inspect flags} #{inspect exptime} 0x#{:erlang.integer_to_binary(opaque, 16)} #{cas}"
+    # Logger.info "binary_set_cmd: #{key} #{inspect value} #{inspect flags} #{inspect exptime} 0x#{:erlang.integer_to_binary(opaque, 16)} #{cas}"
     case ExMemcached.set(key, value, flags, exptime, cas) do
       {:stored, current_cas} ->
         send_response_header(server_state, opcode, 0, 0, 0, Bd.protocol_binray_response_success, 0, opaque, current_cas)
@@ -220,7 +220,7 @@ defmodule ExMemcached.BinaryCommands do
   end
 
   def binary_gat_cmd(key, expirary, opcode, opaque, server_state) do
-    Logger.info "binary_gat_cmd: #{expirary} #{key} 0x#{:erlang.integer_to_binary(opaque, 16)}"
+    # Logger.info "binary_gat_cmd: #{expirary} #{key} 0x#{:erlang.integer_to_binary(opaque, 16)}"
     case ExMemcached.gat(key, expirary) do
       {value, flags, cas} when is_integer(value) ->
         send_response_header(server_state, opcode, 0, 4, 0, Bd.protocol_binray_response_success, 12, opaque, cas)
@@ -239,7 +239,7 @@ defmodule ExMemcached.BinaryCommands do
   end
 
   def binary_gatq_cmd(key, expirary, opcode, opaque, server_state) do
-    Logger.info "binary_gatq_cmd: #{expirary} #{key} 0x#{:erlang.integer_to_binary(opaque, 16)}"
+    # Logger.info "binary_gatq_cmd: #{expirary} #{key} 0x#{:erlang.integer_to_binary(opaque, 16)}"
     case ExMemcached.gat(key, expirary) do
       {value, flags, cas} when is_integer(value) ->
         response = make_response_header(opcode, 0, 4, 0, Bd.protocol_binray_response_success, 12, opaque, cas)
@@ -256,7 +256,6 @@ defmodule ExMemcached.BinaryCommands do
           ServerState.send_data(server_state, << flags::size(32) >>)
         end
       :not_found ->
-        Logger.debug("c")
         server_state # send_error(server_state, opcode, opaque, Bd.protocol_binray_response_key_enoent)
     end
   end
@@ -318,8 +317,8 @@ defmodule ExMemcached.BinaryCommands do
     send_response_header(server_state, opcode, 0, 0, 0, Bd.protocol_binray_response_success, 0, opaque)
   end
 
-  def binary_flushq_cmd(expiration, opcode, _opaque, server_state) do
-    # Logger.info "binary_flushq_cmd: #{Bd.opcode_description(opcode)}"
+  def binary_flushq_cmd(expiration, _opcode, _opaque, server_state) do
+    # Logger.info "binary_flushq_cmd: #{Bd.opcode_description(_opcode)}"
     :ok = ExMemcached.flush expiration
     # send_response_header_q(server_state, opcode, 0, 0, 0, Bd.protocol_binray_response_success, 0, opaque)
     server_state
