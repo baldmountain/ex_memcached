@@ -165,7 +165,7 @@ defmodule ExMemcachedTest do
 
   def b_incr key, socket, count \\ 1, initial \\ 0 do
     case b_incr_cas key, socket, count, initial do
-      {ans, cas} -> ans
+      {ans, _cas} -> ans
       :invalid -> :invalid
       :bad_value -> :bad_value
     end
@@ -235,10 +235,10 @@ defmodule ExMemcachedTest do
     Enum.with_index(["mooo\0", "mumble\0\0\0\0\r\rblarg", "\0", "\r"])
       |> Enum.each(fn ({item, idx}) ->
         key = "foo#{idx}"
-        response = set key, item, 0, 0, meta[:socket]
+        response = set(key, item, 0, 0, meta[:socket])
         assert(response == "STORED\r\n")
-        values = get key, meta[:socket]
-        assert Dict.get(values, key) == item
+        values = get(key, meta[:socket])
+        assert(Dict.get(values, key) == item)
       end)
   end
 
@@ -268,16 +268,16 @@ defmodule ExMemcachedTest do
     assert b_delete "x", meta[:socket]
     assert b_empty "x", meta[:socket]
 
-    {Bd.protocol_binray_response_success, cas} = b_set meta[:socket], "x", "somevalex", 5, 19
+    {Bd.protocol_binray_response_success, _cas} = b_set meta[:socket], "x", "somevalex", 5, 19
     {"somevalex", 5, _} = b_get "x", meta[:socket]
-    {Bd.protocol_binray_response_success, cas} = b_set meta[:socket], "y", "somevaley", 5, 17
+    {Bd.protocol_binray_response_success, _cas} = b_set meta[:socket], "y", "somevaley", 5, 17
     {"somevaley", 5, _} = b_get "y", meta[:socket]
     b_flush meta[:socket]
     assert b_empty "x", meta[:socket]
     assert b_empty "y", meta[:socket]
 
     # add
-    assert b_empty "i", meta[:socket]
+    assert(b_empty("i", meta[:socket]))
     {Bd.protocol_binray_response_success, _} = b_add "i", "ex", 5, 10, meta[:socket]
     {"ex", 5, _} = b_get "i", meta[:socket]
     {Bd.protocol_binray_response_key_eexists, _} = b_add "i", "ex", 5, 10, meta[:socket]
@@ -285,13 +285,13 @@ defmodule ExMemcachedTest do
 
     # too big
     assert b_empty "toobig", meta[:socket]
-    {Bd.protocol_binray_response_success, cas} == b_set meta[:socket], "toobig", "not too big", 10, 10
+    {Bd.protocol_binray_response_success, _cas} = b_set meta[:socket], "toobig", "not too big", 10, 10
     {"not too big", 10, _} = b_get "toobig", meta[:socket]
     s = "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"
     s = Enum.reduce 1..10484, s, fn(_, acc) -> acc <> s end
     s = s <> "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"
     # s has 1024*1024 + 1 long string
-    {Bd.protocol_binray_response_e2big, cas} == b_set meta[:socket], "toobig", s, 10, 10
+    {Bd.protocol_binray_response_e2big, _cas} = b_set meta[:socket], "toobig", s, 10, 10
     assert b_empty "toobig", meta[:socket]
 
     # Replace

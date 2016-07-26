@@ -48,9 +48,9 @@ defmodule ExMemcached.Server do
   defp handle_binary_protocol(server_state, data) do
     try do
       data = read_expected server_state, data, 24
-      << Bd.protocol_binary_req, opcode, keylen::big-unsigned-integer-size(16), extlen, datatype, reserved::big-unsigned-integer-size(16),
+      << Bd.protocol_binary_req, opcode, keylen::big-unsigned-integer-size(16), extlen, _datatype, _reserved::big-unsigned-integer-size(16),
         bodylen::big-unsigned-integer-size(32), opaque::big-unsigned-integer-size(32), cas::big-unsigned-integer-size(64), tail::binary >> = data
-        # Logger.info "#{Bd.opcode_description opcode} keylen #{keylen} extlen #{extlen} datatype #{datatype} reserved #{reserved} bodylen #{bodylen} opaque #{opaque} cas #{cas}"
+        # Logger.info "#{Bd.opcode_description opcode} keylen #{keylen} extlen #{extlen} datatype #{_datatype} reserved #{_reserved} bodylen #{bodylen} opaque #{opaque} cas #{cas}"
 
       if keylen > 250 do
         B.send_error(server_state, opcode, opaque, Bd.protocol_binray_response_e2big)
