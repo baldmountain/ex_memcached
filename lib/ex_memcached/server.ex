@@ -53,7 +53,7 @@ defmodule ExMemcached.Server do
         Logger.info "#{Bd.opcode_description opcode} keylen #{keylen} extlen #{extlen} datatype #{_datatype} reserved #{_reserved} bodylen #{bodylen} opaque #{opaque} cas #{cas}"
 
       if keylen > 250 do
-        B.send_error(server_state, opcode, opaque, Bd.protocol_binray_response_e2big)
+        B.send_error(server_state, opcode, opaque, Bd.protocol_binray_response_einval)
         ServerState.close_transport(server_state)
       else
         case opcode do
