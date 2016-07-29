@@ -50,7 +50,7 @@ defmodule ExMemcached.Server do
       data = read_expected server_state, data, 24
       << Bd.protocol_binary_req, opcode, keylen::big-unsigned-integer-size(16), extlen, _datatype, _reserved::big-unsigned-integer-size(16),
         bodylen::big-unsigned-integer-size(32), opaque::big-unsigned-integer-size(32), cas::big-unsigned-integer-size(64), tail::binary >> = data
-        # Logger.info "#{Bd.opcode_description opcode} keylen #{keylen} extlen #{extlen} datatype #{_datatype} reserved #{_reserved} bodylen #{bodylen} opaque #{opaque} cas #{cas}"
+        Logger.info "#{Bd.opcode_description opcode} keylen #{keylen} extlen #{extlen} datatype #{_datatype} reserved #{_reserved} bodylen #{bodylen} opaque #{opaque} cas #{cas}"
 
       if keylen > 250 do
         B.send_error(server_state, opcode, opaque, Bd.protocol_binray_response_e2big)
@@ -367,6 +367,10 @@ defmodule ExMemcached.Server do
     catch
       :error, :badmatch ->
         Logger.info "Badmatch on input command  #{Exception.format_stacktrace(System.stacktrace())}"
+        << _magic, opcode, _tail::binary >> = data
+        B.send_response_header(server_state, opcode, 0, 0, 0, Bd.protocol_binray_response_einval, 0, 0)
+      :invalid_key_size ->
+        Logger.info "Bad key match"
         << _magic, opcode, _tail::binary >> = data
         B.send_response_header(server_state, opcode, 0, 0, 0, Bd.protocol_binray_response_einval, 0, 0)
       :exit, value ->
@@ -854,14 +858,18 @@ defmodule ExMemcached.Server do
 
   defp key_data(extlen, keylen, buffer) do
     # Logger.info("extlen: #{extlen} keylen: #{keylen} buffer: #{buffer} ")
-    case extlen do
-      0 ->
-        << key::binary-size(keylen), data::binary >> = buffer
-        {key, data}
-      _ ->
-        extlen = extlen * 8
-        << _::size(extlen), key::binary-size(keylen), data::binary >> = buffer
-        {key, data}
+    try do
+      case extlen do
+        0 ->
+          << key::binary-size(keylen), data::binary >> = buffer
+          {key, data}
+        _ ->
+          extlen = extlen * 8
+          << _::size(extlen), key::binary-size(keylen), data::binary >> = buffer
+          {key, data}
+      end
+    catch
+      :badmatch -> throw :invalid_key_size
     end
   end
 
