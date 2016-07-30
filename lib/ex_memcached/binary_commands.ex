@@ -260,6 +260,52 @@ defmodule ExMemcached.BinaryCommands do
     end
   end
 
+  def binary_gatk_cmd(key, expirary, opcode, opaque, server_state) do
+    keylen = byte_size(key)
+    # Logger.info "binary_gatk_cmd: #{expirary} #{key} #{keylen} 0x#{:erlang.integer_to_binary(opaque, 16)}"
+    case ExMemcached.gat(key, expirary) do
+      {value, flags, cas} when is_integer(value) ->
+        len = 12 + keylen
+        send_response_header(server_state, opcode, keylen, 4, 0, Bd.protocol_binray_response_success, len, opaque, cas)
+        ServerState.send_data(server_state, << flags::size(32)>> <> key <> << value::size(64) >>)
+      {value, flags, cas} when is_binary(value) ->
+        keylen = byte_size(key)
+        len = byte_size(value) + keylen
+        if len > 0 do
+          send_response_header(server_state, opcode, keylen, 4, 0, Bd.protocol_binray_response_success, len + 4, opaque, cas)
+          ServerState.send_data(server_state, << flags::size(32) >> <> key <> value)
+        else
+          send_response_header(server_state, opcode, keylen, 4, 0, Bd.protocol_binray_response_success, len + 4, opaque, cas)
+          ServerState.send_data(server_state, << flags::size(32) >> <> key)
+        end
+      :not_found -> send_error(server_state, opcode, opaque, Bd.protocol_binray_response_key_enoent)
+    end
+  end
+
+  def binary_gatkq_cmd(key, expirary, opcode, opaque, server_state) do
+    keylen = byte_size(key)
+    # Logger.info "binary_gatkq_cmd: #{expirary} #{key} #{keylen} 0x#{:erlang.integer_to_binary(opaque, 16)}"
+    case ExMemcached.gat(key, expirary) do
+      {value, flags, cas} when is_integer(value) ->
+        len = 12 + keylen
+        response = make_response_header(opcode, keylen, 4, 0, Bd.protocol_binray_response_success, len, opaque, cas)
+          <> << flags::size(32) >> <> key <> << value::size(64) >>
+        %ServerState{server_state | stored_responses: server_state.stored_responses <> response}
+      {value, flags, cas} when is_binary(value) ->
+        keylen = byte_size(key)
+        len = byte_size(value) + keylen
+        if len > 0 do
+          send_response_header(server_state, opcode, keylen, 4, 0, Bd.protocol_binray_response_success, len + 4, opaque, cas)
+          ServerState.send_data(server_state, << flags::size(32) >> <> key <> value)
+        else
+          send_response_header(server_state, opcode, keylen, 4, 0, Bd.protocol_binray_response_success, len + 4, opaque, cas)
+          ServerState.send_data(server_state, << flags::size(32) >> <> key)
+        end
+      :not_found ->
+        server_state # send_error(server_state, opcode, opaque, Bd.protocol_binray_response_key_enoent)
+    end
+  end
+
   def binary_incr_cmd(key, count, intial, expiration, opcode, opaque, server_state) do
     # Logger.info "binary_incr_cmd: #{key} #{inspect count} 0x#{:erlang.integer_to_binary(opaque, 16)}"
     case ExMemcached.incr(key, count, intial, expiration) do

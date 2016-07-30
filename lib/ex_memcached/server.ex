@@ -48,9 +48,9 @@ defmodule ExMemcached.Server do
   defp handle_binary_protocol(server_state, data) do
     try do
       data = read_expected server_state, data, 24
-      << Bd.protocol_binary_req, opcode, keylen::big-unsigned-integer-size(16), extlen, _datatype, _reserved::big-unsigned-integer-size(16),
+      << Bd.protocol_binary_req, opcode, keylen::big-unsigned-integer-size(16), extlen, datatype, reserved::big-unsigned-integer-size(16),
         bodylen::big-unsigned-integer-size(32), opaque::big-unsigned-integer-size(32), cas::big-unsigned-integer-size(64), tail::binary >> = data
-        Logger.info "#{Bd.opcode_description opcode} keylen #{keylen} extlen #{extlen} datatype #{_datatype} reserved #{_reserved} bodylen #{bodylen} opaque #{opaque} cas #{cas}"
+        # Logger.info "#{Bd.opcode_description opcode} keylen #{keylen} extlen #{extlen} datatype #{datatype} reserved #{reserved} bodylen #{bodylen} opaque 0x#{:erlang.integer_to_binary(opaque, 16)} cas #{cas}"
 
       if keylen > 250 do
         B.send_error(server_state, opcode, opaque, Bd.protocol_binray_response_einval)
@@ -324,6 +324,16 @@ defmodule ExMemcached.Server do
             tail = read_expected server_state, tail, extlen + keylen
             << exptime::size(32), key::binary-size(keylen), data::binary >> = tail
             server_state = B.binary_gatq_cmd(key, exptime, opcode, opaque, server_state)
+            handle_binary_protocol(server_state, data)
+          Bd.protocol_binray_cmd_gatk ->
+            tail = read_expected server_state, tail, extlen + keylen
+            << exptime::size(32), key::binary-size(keylen), data::binary >> = tail
+            server_state = B.binary_gatk_cmd(key, exptime, opcode, opaque, server_state)
+            handle_binary_protocol(server_state, data)
+          Bd.protocol_binray_cmd_gatkq ->
+            tail = read_expected server_state, tail, extlen + keylen
+            << exptime::size(32), key::binary-size(keylen), data::binary >> = tail
+            server_state = B.binary_gatkq_cmd(key, exptime, opcode, opaque, server_state)
             handle_binary_protocol(server_state, data)
           Bd.protocol_binray_cmd_stat ->
             {key, data} = key_data(extlen, keylen, tail)
