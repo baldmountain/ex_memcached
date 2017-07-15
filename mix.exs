@@ -4,13 +4,13 @@ defmodule ExMemcached.Mixfile do
   def project do
     [ app: :ex_memcached,
       version: "0.0.2",
-      elixir: "~> 1.3.0",
-      deps: deps]
+      elixir: "~> 1.4.0",
+      deps: deps()]
       # elixirc_options: options(Mix.env) ]
   end
 
   # Configuration for the OTP application
-  def application do
+  def application() do
     [
       mod: { ExMemcached, [] },
       applications: [:logger, :ranch], # , :sasl],
@@ -24,10 +24,10 @@ defmodule ExMemcached.Mixfile do
   #
   # To specify particular versions, regardless of the tag, do:
   # { :barbat, "~> 0.1", github: "elixir-lang/barbat" }
-  defp deps do
+  defp deps() do
     [
-      { :ranch, "~> 1.2.1" },
-      { :exrm, "~> 1.0.8" }
+      { :ranch, "~> 1.4.0" },
+      { :distillery, "~> 1.4", runtime: false }
     ]
   end
 

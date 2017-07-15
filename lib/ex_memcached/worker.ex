@@ -28,17 +28,17 @@ defmodule ExMemcached.Worker do
 
   def init([]) do
     Logger.info "Worker init - max size: #{Application.get_env(:ex_memcached, :max_data_size)}"
-    { :ok, {HashDict.new, %WorkerState{}} }
+    { :ok, {Map.new, %WorkerState{}} }
   end
 
   def handle_call({:get, key} , _from, {data, work_state}) do
-    case Dict.get(data, key) do
+    case Map.get(data, key) do
       nil ->
         { :reply, :not_found, {data, WorkerState.miss(work_state)} }
       {value, timestamp, flags, exptime, cas} ->
         case check_expiration(value, timestamp, exptime) do
           nil ->
-            { :reply, :not_found, {HashDict.delete(data, key), WorkerState.allocated_change(WorkerState.miss(work_state), -byte_size(value))} }
+            { :reply, :not_found, {Map.delete(data, key), WorkerState.allocated_change(WorkerState.miss(work_state), -byte_size(value))} }
           value ->
             { :reply, {value, flags, cas}, {data, WorkerState.hit(work_state)} }
         end
@@ -52,14 +52,14 @@ defmodule ExMemcached.Worker do
   def handle_call({:set, key, value, flags, exptime, cas}, _from, {data, work_state}) do
     case cas do
       0 ->
-        data = Dict.put(data, key, {value, generate_expire_time(exptime), flags, exptime, work_state.current_cas})
+        data = Map.put(data, key, {value, generate_expire_time(exptime), flags, exptime, work_state.current_cas})
         { :reply, {:stored, work_state.current_cas}, {data, WorkerState.allocated_change(WorkerState.next_cas(work_state), byte_size(value))} }
       _ ->
-        case Dict.get(data, key) do
+        case Map.get(data, key) do
           nil ->
             { :reply, :not_found, {data, work_state} }
           {old_value, _, _, _, ^cas} ->
-            data = Dict.put(data, key, {value, generate_expire_time(exptime), flags, exptime, work_state.current_cas})
+            data = Map.put(data, key, {value, generate_expire_time(exptime), flags, exptime, work_state.current_cas})
             { :reply, {:stored, work_state.current_cas}, {data, WorkerState.allocated_change(WorkerState.next_cas(work_state), byte_size(value)-byte_size(old_value))} }
           {_, _, _, _, _} ->
             { :reply, :exists, {data, work_state} }
@@ -68,14 +68,14 @@ defmodule ExMemcached.Worker do
   end
 
   def handle_call({:add, key, value, flags, expirary}, _from, {data, work_state}) do
-    case Dict.get(data, key) do
+    case Map.get(data, key) do
       nil ->
-        data = Dict.put(data, key, {value, generate_expire_time(expirary), flags, expirary, work_state.current_cas})
+        data = Map.put(data, key, {value, generate_expire_time(expirary), flags, expirary, work_state.current_cas})
         { :reply, {:stored, work_state.current_cas}, {data, WorkerState.allocated_change(WorkerState.next_cas(work_state), byte_size(value))} }
       {old_value, timestamp, _, exptime, _} ->
         case check_expiration(old_value, timestamp, exptime) do
           nil ->
-            data = Dict.put(data, key, {value, generate_expire_time(expirary), flags, expirary, work_state.current_cas})
+            data = Map.put(data, key, {value, generate_expire_time(expirary), flags, expirary, work_state.current_cas})
             { :reply, {:stored, work_state.current_cas}, {data, WorkerState.allocated_change(WorkerState.next_cas(work_state), byte_size(value)-byte_size(old_value)) } }
           _ ->
             { :reply, :not_stored, {data, work_state} }
@@ -84,7 +84,7 @@ defmodule ExMemcached.Worker do
   end
 
   def handle_call({:replace, key, value, flags, expirary}, _from, {data, work_state}) do
-    case Dict.get(data, key) do
+    case Map.get(data, key) do
       nil ->
         { :reply, :not_found, {data, work_state} }
       {old_value, timestamp, _, exptime, _} ->
@@ -92,36 +92,36 @@ defmodule ExMemcached.Worker do
           nil ->
             { :reply, :not_stored, {data, WorkerState.allocated_change(work_state, -byte_size(old_value))} }
           _ ->
-            data = Dict.put(data, key, {value, generate_expire_time(expirary), flags, expirary, work_state.current_cas})
+            data = Map.put(data, key, {value, generate_expire_time(expirary), flags, expirary, work_state.current_cas})
             { :reply, {:stored, work_state.current_cas}, {data, WorkerState.allocated_change(WorkerState.next_cas(work_state), byte_size(value))} }
         end
     end
   end
 
   def handle_call({:append, key, value, _flags, _exptime}, _from, {data, work_state}) do
-    case Dict.get(data, key) do
+    case Map.get(data, key) do
       nil ->
         { :reply, :not_stored, {data, work_state} }
       {evalue, timestamp, eflags, eexptime, _} ->
-        data = Dict.put(data, key, {evalue <> value, timestamp, eflags, eexptime, work_state.current_cas})
+        data = Map.put(data, key, {evalue <> value, timestamp, eflags, eexptime, work_state.current_cas})
         { :reply, {:stored, work_state.current_cas}, {data, WorkerState.allocated_change(WorkerState.next_cas(work_state), byte_size(value))} }
     end
   end
 
   def handle_call({:prepend, key, value, _flags, _exptime}, _from, {data, work_state}) do
-    case Dict.get(data, key) do
+    case Map.get(data, key) do
       nil ->
         { :reply, :not_stored, {data, work_state} }
       {evalue, timestamp, eflags, eexptime, _} ->
-        data = Dict.put(data, key, {value <> evalue, timestamp, eflags, eexptime, work_state.current_cas})
+        data = Map.put(data, key, {value <> evalue, timestamp, eflags, eexptime, work_state.current_cas})
         { :reply, {:stored, work_state.current_cas}, {data, WorkerState.allocated_change(WorkerState.next_cas(work_state), byte_size(value))} }
     end
   end
 
   def handle_call({:cas, key, value, flags, exptime, cas}, _from, {data, work_state}) do
-    case Dict.get(data, key) do
+    case Map.get(data, key) do
       {old_value, _, _, _, ^cas} ->
-        data = Dict.put(data, key, {value, generate_expire_time(exptime), flags, exptime, cas})
+        data = Map.put(data, key, {value, generate_expire_time(exptime), flags, exptime, cas})
         { :reply, {:stored, work_state.current_cas}, {data, WorkerState.allocated_change(work_state, byte_size(value)-byte_size(old_value))} }
       {_, _, _, _, _} ->
         { :reply, :exists, {data, work_state} }
@@ -131,13 +131,13 @@ defmodule ExMemcached.Worker do
   end
 
   def handle_call({:delete, key}, _from, {data, work_state}) do
-    case Dict.get(data, key) do
+    case Map.get(data, key) do
       {value, timestamp, _, exptime, _} ->
         case check_expiration(value, timestamp, exptime) do
           nil ->
-            { :reply, :not_found, {HashDict.delete(data, key), WorkerState.allocated_change(work_state, -byte_size(value))} }
+            { :reply, :not_found, {Map.delete(data, key), WorkerState.allocated_change(work_state, -byte_size(value))} }
           value ->
-            data = Dict.delete(data, key)
+            data = Map.delete(data, key)
             case is_binary(value) do
               true -> { :reply, :deleted, {data, WorkerState.allocated_change(work_state, byte_size(value))} }
               false -> { :reply, :deleted, {data, work_state} }
@@ -149,13 +149,13 @@ defmodule ExMemcached.Worker do
   end
 
   def handle_call({:touch, key, expiration}, _from, {data, work_state}) do
-    case Dict.get(data, key) do
+    case Map.get(data, key) do
       {value, timestamp, flags, exptime, _} ->
         case check_expiration(value, timestamp, exptime) do
           nil ->
-            { :reply, :not_found, {HashDict.delete(data, key), WorkerState.allocated_change(work_state, -byte_size(value))} }
+            { :reply, :not_found, {Map.delete(data, key), WorkerState.allocated_change(work_state, -byte_size(value))} }
           _value ->
-            data = Dict.put(data, key, {value, generate_expire_time(expiration), flags, expiration, work_state.current_cas})
+            data = Map.put(data, key, {value, generate_expire_time(expiration), flags, expiration, work_state.current_cas})
             { :reply, :touched, {data, WorkerState.next_cas(work_state)} }
         end
       _ ->
@@ -164,42 +164,42 @@ defmodule ExMemcached.Worker do
   end
 
   def handle_call({:gat, key, expiration} , _from, {data, work_state}) do
-    case Dict.get(data, key) do
+    case Map.get(data, key) do
       nil ->
         { :reply, :not_found, {data, WorkerState.miss(work_state)} }
       {value, timestamp, flags, exptime, cas} ->
         case check_expiration(value, timestamp, exptime) do
           nil ->
-            { :reply, :not_found, {HashDict.delete(data, key), WorkerState.allocated_change(WorkerState.miss(work_state), -byte_size(value))} }
+            { :reply, :not_found, {Map.delete(data, key), WorkerState.allocated_change(WorkerState.miss(work_state), -byte_size(value))} }
           value ->
-            data = Dict.put(data, key, {value, generate_expire_time(expiration), flags, expiration, work_state.current_cas})
+            data = Map.put(data, key, {value, generate_expire_time(expiration), flags, expiration, work_state.current_cas})
             { :reply, {value, flags, cas}, {data, WorkerState.next_cas(WorkerState.hit(work_state))} }
         end
     end
   end
 
   def handle_call({:incr, key, count, intial, expiration}, _from, {data, work_state}) do
-    case Dict.get(data, key) do
+    case Map.get(data, key) do
       {value, timestamp, flags, exptime, _} ->
         case check_expiration(value, timestamp, exptime) do
           nil when expiration == 0xffffffff ->
             case is_binary(value) do
-              true -> { :reply, :not_found, {HashDict.delete(data, key), WorkerState.allocated_change(work_state, -byte_size(value))} }
-              false -> { :reply, :not_found, {HashDict.delete(data, key), work_state} }
+              true -> { :reply, :not_found, {Map.delete(data, key), WorkerState.allocated_change(work_state, -byte_size(value))} }
+              false -> { :reply, :not_found, {Map.delete(data, key), work_state} }
             end
           nil ->
-            data = Dict.put(data, key, {intial, generate_expire_time(expiration), 0, expiration, work_state.current_cas})
+            data = Map.put(data, key, {intial, generate_expire_time(expiration), 0, expiration, work_state.current_cas})
             { :reply, {intial, work_state.current_cas}, {data, WorkerState.next_cas(work_state)} }
           value when is_integer(value) ->
             value = value + count
             value = if value > 0xffffffffffffffff, do: value - 0x10000000000000000, else: value
-            data = Dict.put(data, key, {value, generate_expire_time(expiration), flags, exptime, work_state.current_cas})
+            data = Map.put(data, key, {value, generate_expire_time(expiration), flags, exptime, work_state.current_cas})
             { :reply, {value, work_state.current_cas}, {data, WorkerState.next_cas(work_state)} }
           value when is_binary(value) ->
             try do
               value = :erlang.binary_to_integer(value) + count
               value = if value > 0xffffffffffffffff, do: value - 0x10000000000000000, else: value
-              data = Dict.put(data, key, {value, generate_expire_time(expiration), flags, exptime, work_state.current_cas})
+              data = Map.put(data, key, {value, generate_expire_time(expiration), flags, exptime, work_state.current_cas})
               { :reply, {value, work_state.current_cas}, {data, WorkerState.next_cas(work_state)} }
             catch
               :error, :badarg ->
@@ -211,33 +211,33 @@ defmodule ExMemcached.Worker do
       nil when expiration == 0xffffffff ->
         { :reply, :not_found, {data, work_state} }
       _ ->
-        data = Dict.put(data, key, {intial, generate_expire_time(expiration), 0, expiration, work_state.current_cas})
+        data = Map.put(data, key, {intial, generate_expire_time(expiration), 0, expiration, work_state.current_cas})
         { :reply, {intial, work_state.current_cas}, {data, WorkerState.next_cas(work_state)} }
     end
   end
 
   def handle_call({:decr, key, count, intial, expiration}, _from, {data, work_state}) do
-    case Dict.get(data, key) do
+    case Map.get(data, key) do
       {value, timestamp, flags, exptime, _} ->
         case check_expiration(value, timestamp, exptime) do
           nil when expiration == 0xffffffff ->
             case is_binary(value) do
-              true -> { :reply, :not_found, {HashDict.delete(data, key), WorkerState.allocated_change(work_state, -byte_size(value))} }
-              false -> { :reply, :not_found, {HashDict.delete(data, key), work_state} }
+              true -> { :reply, :not_found, {Map.delete(data, key), WorkerState.allocated_change(work_state, -byte_size(value))} }
+              false -> { :reply, :not_found, {Map.delete(data, key), work_state} }
             end
           nil ->
-            data = Dict.put(data, key, {intial, generate_expire_time(expiration), 0, expiration, work_state.current_cas})
+            data = Map.put(data, key, {intial, generate_expire_time(expiration), 0, expiration, work_state.current_cas})
             { :reply, {intial, work_state.current_cas}, {data, WorkerState.next_cas(work_state)} }
           value when is_integer(value) ->
             value = value - count
             value = if value < 0, do: 0, else: value
-            data = Dict.put(data, key, {value, generate_expire_time(expiration), flags, exptime, work_state.current_cas})
+            data = Map.put(data, key, {value, generate_expire_time(expiration), flags, exptime, work_state.current_cas})
             { :reply, {value, work_state.current_cas}, {data, WorkerState.next_cas(work_state)} }
           value when is_binary(value) ->
             try do
               value = :erlang.binary_to_integer(value) - count
               value = if value < 0, do: value = 0, else: value
-              data = Dict.put(data, key, {value, generate_expire_time(expiration), flags, exptime, work_state.current_cas})
+              data = Map.put(data, key, {value, generate_expire_time(expiration), flags, exptime, work_state.current_cas})
               { :reply, {value, work_state.current_cas}, {data, WorkerState.next_cas(work_state)} }
             catch
               :error, :badarg ->
@@ -249,7 +249,7 @@ defmodule ExMemcached.Worker do
       nil when expiration == 0xffffffff ->
         { :reply, :not_found, {data, work_state} }
       _ ->
-        data = Dict.put(data, key, {intial, generate_expire_time(expiration), 0, expiration, work_state.current_cas})
+        data = Map.put(data, key, {intial, generate_expire_time(expiration), 0, expiration, work_state.current_cas})
         { :reply, {intial, work_state.current_cas}, {data, WorkerState.next_cas(work_state)} }
     end
   end
@@ -261,17 +261,17 @@ defmodule ExMemcached.Worker do
       true -> expiration
     end
     case expiration do
-      0 -> { :reply, :ok, {HashDict.new, %WorkerState{work_state | allocated: 0 } } }
+      0 -> { :reply, :ok, {Map.new, %WorkerState{work_state | allocated: 0 } } }
       _ ->
-        {data, work_state} = Dict.keys(data)
+        {data, work_state} = Map.keys(data)
           |> Enum.reduce({data, work_state}, fn(key, {data, work_state}) ->
-            case Dict.get(data, key) do
+            case Map.get(data, key) do
               {value, timestamp, flags, exptime, cas} ->
                 case check_expiration(value, timestamp, exptime) do
                   nil ->
                     {data, WorkerState.allocated_change(work_state, -byte_size(value))}
                   _ ->
-                    {Dict.put(data, key, {value, generate_expire_time(expiration), flags, expiration, cas}), work_state}
+                    {Map.put(data, key, {value, generate_expire_time(expiration), flags, expiration, cas}), work_state}
                 end
               _ -> { data, work_state }
             end
@@ -285,7 +285,7 @@ defmodule ExMemcached.Worker do
       %{
         get_hits: work_state.get_hits,
         get_misses: work_state.get_misses,
-        curr_items: Dict.size(data),
+        curr_items: Map.size(data),
         bytes: work_state.allocated
       },
       {data, work_state} }

@@ -11,6 +11,6 @@ defmodule ExMemcached.Supervisor do
       worker(ExMemcached.Worker, [])
     ]
 
-    Supervisor.start_link(children, strategy: :one_for_one)
+    Supervisor.start_link(children, strategy: :one_for_one, name: :ExMemcachedServer)
   end
 end
