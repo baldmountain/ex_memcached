@@ -378,7 +378,8 @@ defmodule ExMemcached.Server do
       :error, :badmatch ->
         Logger.info "Badmatch on input command  #{Exception.format_stacktrace(System.stacktrace())}"
         << _magic, opcode, _tail::binary >> = data
-        B.send_response_header(server_state, opcode, 0, 0, 0, Bd.protocol_binray_response_einval, 0, 0)
+        server_state = B.send_response_header(server_state, opcode, 0, 0, 0, Bd.protocol_binray_response_einval, 0, 0)
+        ServerState.close_transport(server_state)
       :invalid_key_size ->
         Logger.info "Bad key match"
         << _magic, opcode, _tail::binary >> = data
